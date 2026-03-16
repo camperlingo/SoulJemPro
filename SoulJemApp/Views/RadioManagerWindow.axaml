@@ -1,0 +1,23 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SoulJemApp.Views.RadioManagerWindow"
+        Width="600" Height="400"
+        Title="Gestione Web Radio"
+        Background="#1A1A1A" Foreground="White">
+
+    <DockPanel Margin="10">
+        <StackPanel Orientation="Horizontal" DockPanel.Dock="Top" Margin="0,0,0,10" Spacing="10">
+            <Button Content="➕ Aggiungi Nuova Radio" Click="AddRadio_Click" Background="#2E7D32" FontWeight="Bold"/>
+            <Button Content="💾 Salva e Chiudi" Click="Save_Click" Background="#1565C0" FontWeight="Bold"/>
+        </StackPanel>
+
+        <Button Content="❌ Elimina Selezionata" DockPanel.Dock="Bottom" Margin="0,10,0,0" Click="Delete_Click" Background="#C62828" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+
+        <DataGrid x:Name="RadioGrid" AutoGenerateColumns="False" GridLinesVisibility="All" Background="#0A0A0A" x:CompileBindings="False">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Nome Radio" Binding="{Binding Name}" Width="150"/>
+                <DataGridTextColumn Header="URL Streaming" Binding="{Binding Url}" Width="*"/>
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</Window>

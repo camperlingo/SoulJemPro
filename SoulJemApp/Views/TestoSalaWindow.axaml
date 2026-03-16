@@ -1,0 +1,12 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SoulJemApp.Views.TestoSalaWindow"
+        Title="KARAOKE PROMPTER - Sala" 
+        Background="#000000" Foreground="White"
+        WindowStartupLocation="Manual"
+        Topmost="True">
+    
+    <Canvas Name="MainCanvas" ClipToBounds="True" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+        <StackPanel Name="ScrollingContainer" Spacing="0"/>
+    </Canvas>
+</Window>

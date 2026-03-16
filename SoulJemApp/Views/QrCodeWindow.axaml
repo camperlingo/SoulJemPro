@@ -1,0 +1,13 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SoulJemApp.Views.QrCodeWindow"
+        Title="📱 QR Code Clienti"
+        Background="#0D0D0D"
+        Width="500" Height="600"
+        WindowStartupLocation="CenterScreen">
+    <Grid RowDefinitions="Auto, *, Auto" Margin="20">
+        <TextBlock Grid.Row="0" Text="INQUADRA PER LE RICHIESTE" FontSize="24" FontWeight="Bold" Foreground="#00E5FF" HorizontalAlignment="Center" Margin="0,0,0,20"/>
+        <Image Grid.Row="1" Name="QrImage" Stretch="Uniform"/>
+        <TextBlock Grid.Row="2" Name="UrlText" FontSize="18" Foreground="White" HorizontalAlignment="Center" Margin="0,20,0,0"/>
+    </Grid>
+</Window>

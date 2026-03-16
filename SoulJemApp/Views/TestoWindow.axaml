@@ -1,0 +1,8 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="SoulJemApp.Views.TestoWindow"
+             Background="#000000" Foreground="White">
+    <Canvas Name="MainCanvas" ClipToBounds="True" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+        <StackPanel Name="ScrollingContainer" Spacing="0"/>
+    </Canvas>
+</UserControl>

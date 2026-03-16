@@ -1,0 +1,85 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SoulJemApp.Views.MidiMixerWindow"
+        Title="SOULJEM WORKSTATION PRO" WindowState="Maximized"
+        Background="#000000" Foreground="White"
+        WindowStartupLocation="CenterScreen">
+    
+    <Grid Name="MainGrid">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="360"/>
+        </Grid.ColumnDefinitions>
+        
+        <Grid Name="LeftGrid" Grid.Column="0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="200"/>
+            </Grid.RowDefinitions>
+
+            <ContentControl Name="TestoContainer" Grid.Row="0" Background="Black" ClipToBounds="True" PointerPressed="OnTestoDoubleTapped"/>
+            
+            <Border Name="RollBorder" Grid.Row="1" BorderBrush="#333" BorderThickness="0,1,1,0">
+                <ContentControl Name="RollContainer" Background="#050505" ClipToBounds="True"/>
+            </Border>
+        </Grid>
+
+        <Border Name="MixerBorder" Grid.Column="1" Background="#1E1E1E" BorderBrush="#444" BorderThickness="1,0,0,0">
+            <StackPanel Spacing="0">
+                <Border Background="#2D2D2D" Padding="10">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="5" Margin="0,0,0,10">
+                            <TextBlock Text="🎛️" FontSize="16"/>
+                            <TextBlock Text="MIDI WORKSTATION" FontSize="14" FontWeight="Bold" Foreground="#FFCC00"/>
+                        </StackPanel>
+                        
+                        <Grid ColumnDefinitions="*, *" Margin="10,0,10,10">
+                            <Button Grid.Column="0" Content="📝 TESTO (FULL)" Background="#444" Foreground="White" FontWeight="Bold" FontSize="11" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Margin="2" Click="OnTestoClick"/>
+                            <Button Grid.Column="1" Content="📺 SALA" Background="#0052CC" Foreground="White" FontWeight="Bold" FontSize="11" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Margin="2" Click="OnSalaClick"/>
+                        </Grid>
+                        
+                        <Grid ColumnDefinitions="*, *, *" Margin="0,0,0,10">
+                            <Button Grid.Column="0" Content="⏪ REW" Background="#444" Foreground="White" FontWeight="Bold" FontSize="11" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Margin="2" Click="OnRewindClick"/>
+                            <Button Grid.Column="1" Name="PlayPauseBtn" Content="▶ PLAY" Background="#388E3C" Foreground="White" FontWeight="Bold" FontSize="11" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Margin="2" Click="OnPlayPauseClick"/>
+                            <Button Grid.Column="2" Content="⏹ STOP" Background="#D32F2F" Foreground="White" FontWeight="Bold" FontSize="11" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Margin="2" Click="OnStopClick"/>
+                        </Grid>
+
+                        <StackPanel Margin="5,0,5,5">
+                            <TextBlock Text="Volume Master:" FontSize="11" FontWeight="Bold" Foreground="White"/>
+                            <Slider Name="MasterVolumeSlider" Minimum="0" Maximum="100" Value="40" ValueChanged="OnMasterVolumeChanged"/>
+                        </StackPanel>
+
+                        <ProgressBar Name="SongProgressBar" Minimum="0" Maximum="100" Value="0" Height="8" Margin="5,10,5,5" Foreground="#29B6F6" Background="#111111" CornerRadius="4"/>
+                    </StackPanel>
+                </Border>
+
+                <Border BorderBrush="#555" BorderThickness="0,1,0,1" Margin="0,15,0,10" Padding="10,15,10,10">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="-Master Controls-" Foreground="Gray" FontSize="11" HorizontalAlignment="Center" Margin="0,-25,0,0" Background="#1E1E1E" Padding="5,0"/>
+                        
+                        <Grid ColumnDefinitions="Auto, Auto, Auto, Auto" HorizontalAlignment="Center">
+                            <TextBlock Grid.Column="0" Text="Pitch:" VerticalAlignment="Center" Width="45" FontWeight="Bold" FontSize="12"/>
+                            <Border Grid.Column="1" Background="Black" Width="35" Height="22" Margin="0,0,10,0">
+                                <TextBlock Name="PitchTxt" Text="0" Foreground="#00FF00" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold"/>
+                            </Border>
+                            <Button Grid.Column="2" Content="-" Width="30" Height="25" Background="#333" Click="OnPitchMinus" Margin="0,0,5,0" HorizontalContentAlignment="Center" Padding="0"/>
+                            <Button Grid.Column="3" Content="+" Width="30" Height="25" Background="#333" Click="OnPitchPlus" HorizontalContentAlignment="Center" Padding="0"/>
+                        </Grid>
+
+                        <Grid ColumnDefinitions="Auto, *, Auto" Margin="10,0">
+                            <TextBlock Grid.Column="0" Text="Tempo:" VerticalAlignment="Center" Width="55" FontWeight="Bold" FontSize="12"/>
+                            <Slider Grid.Column="1" Name="TempoSlider" Minimum="0.5" Maximum="1.5" Value="1.0" SmallChange="0.1" ValueChanged="OnTempoSliderChanged" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                            <Border Grid.Column="2" Background="Black" Width="45" Height="22">
+                                <TextBlock Name="TempoTxt" Text="100%" Foreground="Cyan" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold" FontSize="11"/>
+                            </Border>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <ScrollViewer Height="400" Margin="10,0">
+                    <StackPanel Name="ChannelsContainer" Spacing="3"/>
+                </ScrollViewer>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

@@ -1,0 +1,67 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SoulJemApp.Views.AddSingerWindow"
+        Title="Gestione Esecuzione - SoulJem v5.1"
+        Width="550" Height="520" 
+        WindowStartupLocation="CenterOwner"
+        Background="#1A1A1A" Foreground="White" 
+        CanResize="False" SystemDecorations="Full">
+    
+    <StackPanel Margin="25" Spacing="15">
+        <TextBlock Text="CONFIGURA BRANO" FontWeight="Bold" Foreground="#FF9800" FontSize="20" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+        
+        <StackPanel>
+            <TextBlock Text="CANTANTE:" FontSize="11" Opacity="0.5" Margin="0,0,0,5"/>
+            <TextBox Name="SingerNameInput" Watermark="Inserisci nome..." Background="#222" FontSize="16"/>
+        </StackPanel>
+
+        <StackPanel>
+            <TextBlock Text="TITOLO BRANO:" FontSize="11" Opacity="0.5" Margin="0,0,0,5"/>
+            <Grid ColumnDefinitions="*, Auto">
+                <TextBox Grid.Column="0" Name="SongTitleInput" Watermark="Inserisci il titolo della canzone..." Background="#222" FontSize="16"/>
+                <Button Grid.Column="1" Content="🌐" Click="OnSearchWebClick" Margin="5,0,0,0" Background="#1565C0" Width="40" HorizontalContentAlignment="Center" ToolTip.Tip="Cerca base su YouTube"/>
+            </Grid>
+        </StackPanel>
+
+        <StackPanel>
+            <TextBlock Text="URL WEB O FILE LOCALE:" FontSize="11" Opacity="0.5" Margin="0,0,0,5"/>
+            <Grid ColumnDefinitions="*, Auto">
+                <TextBox Grid.Column="0" Name="PathInput" Watermark="Incolla URL o trascina file..." Background="#222"/>
+                <Button Grid.Column="1" Content="📂" Click="OnBrowseClick" Margin="5,0,0,0" Background="#333" Width="40" HorizontalContentAlignment="Center"/>
+            </Grid>
+        </StackPanel>
+
+        <StackPanel>
+            <TextBlock Text="VARIAZIONE TONALITÀ (PITCH):" FontSize="11" Opacity="0.5" Margin="0,0,0,5"/>
+            <Grid ColumnDefinitions="Auto, *, Auto">
+                <Button Grid.Column="0" Content="-" Click="PitchMinus_Click" Width="40" Background="#333"/>
+                
+                <Slider Grid.Column="1" Name="PitchSlider" Minimum="-18" Maximum="18" Value="0" Margin="15,0" 
+                        SmallChange="1" TickFrequency="1" IsSnapToTickEnabled="True"/>
+                
+                <Button Grid.Column="2" Content="+" Click="PitchPlus_Click" Width="40" Background="#333"/>
+            </Grid>
+            <Border Background="Black" HorizontalAlignment="Center" Padding="15,5" CornerRadius="5" Margin="0,5">
+                <TextBlock Text="{Binding #PitchSlider.Value}" Foreground="#FFCC00" FontWeight="Bold" FontSize="18"/>
+            </Border>
+        </StackPanel>
+
+        <Grid ColumnDefinitions="*, *" Margin="0,20,0,0" Height="60">
+            <Button Grid.Column="0" Name="AddToPlaylistBtn" Click="OnAddToPlaylist"
+                    Background="#2E7D32" Margin="5" HorizontalAlignment="Stretch">
+                <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+                    <TextBlock Text="👤" FontSize="20"/>
+                    <TextBlock Text="IN PLAYLIST" VerticalAlignment="Center" FontWeight="Bold"/>
+                </StackPanel>
+            </Button>
+
+            <Button Grid.Column="1" Name="PianoBarBtn" Click="OnPianoBarInstant"
+                    Background="#1565C0" Margin="5" HorizontalAlignment="Stretch">
+                <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+                    <TextBlock Text="🎹" FontSize="20"/>
+                    <TextBlock Text="PIANO BAR" VerticalAlignment="Center" FontWeight="Bold"/>
+                </StackPanel>
+            </Button>
+        </Grid>
+    </StackPanel>
+</Window>

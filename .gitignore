@@ -1,0 +1,21 @@
+# Escludi le cartelle di compilazione pesanti di .NET
+bin/
+obj/
+
+# Escludi la Smart Cache di SoulJem
+Downloads/
+
+# Escludi eventuali basi musicali e video personali (per non caricare Giga di roba)
+*.mp4
+*.mp3
+*.mid
+*.kar
+*.mkv
+*.avi
+
+# Escludi i file di configurazione dell'utente o database locali
+NightHistory.json
+*.zip
+*.sf2
+*.zip
+*.sf2

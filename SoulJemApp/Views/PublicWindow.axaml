@@ -1,0 +1,15 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SoulJemApp.Views.PublicWindow"
+        Title="SoulJem Pro - SCHERMO PUBBLICO"
+        Background="Black"
+        WindowState="Normal"
+        WindowStartupLocation="CenterScreen">
+    <Grid>
+        <TextBlock Text="In attesa del brano..." 
+                   Foreground="White" 
+                   HorizontalAlignment="Center" 
+                   VerticalAlignment="Center" 
+                   FontSize="30" Opacity="0.3"/>
+    </Grid>
+</Window>

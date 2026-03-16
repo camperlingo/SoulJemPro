@@ -1,0 +1,35 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="SoulJemApp.Views.VisualizerWindow"
+             Background="#050505">
+    
+    <Grid ColumnDefinitions="280, *">
+        <Border Grid.Column="0" Background="#111111" BorderBrush="#333" BorderThickness="0,0,1,0" Padding="10">
+            <StackPanel Spacing="10" VerticalAlignment="Center">
+                
+                <Grid ColumnDefinitions="Auto, *">
+                    <Button Name="LangBtn" Grid.Column="0" Content="ITA" Background="#2E7D32" Foreground="White" FontWeight="Bold" Width="45" Height="30" HorizontalContentAlignment="Center" Margin="0,0,5,0" Click="OnLangToggleClick"/>
+                    <ComboBox Name="TrackCombo" Grid.Column="1" HorizontalAlignment="Stretch" Height="30" SelectionChanged="OnTrackSelectionChanged"/>
+                </Grid>
+
+                <Grid ColumnDefinitions="*, *" Margin="0,5,0,0">
+                    <Border Grid.Column="0" Background="#0A0A0A" BorderBrush="#222" BorderThickness="1" Margin="0,0,5,0" Height="70" CornerRadius="3">
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="NOTA" FontSize="10" Foreground="Gray" HorizontalAlignment="Center"/>
+                            <TextBlock Name="CurrentNoteTxt" Text="--" FontSize="18" FontWeight="Bold" Foreground="#29B6F6" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="1" Background="#0A0A0A" BorderBrush="#222" BorderThickness="1" Margin="5,0,0,0" Height="70" CornerRadius="3">
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="ACCORDO" FontSize="10" Foreground="Gray" HorizontalAlignment="Center"/>
+                            <TextBlock Name="CurrentChordTxt" Text="--" FontSize="18" FontWeight="Bold" Foreground="#F57C00" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+            </StackPanel>
+        </Border>
+        
+        <Canvas Grid.Column="1" Name="MainCanvas" ClipToBounds="True" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+    </Grid>
+</UserControl>
