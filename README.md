@@ -23,3 +23,5 @@ Per funzionare correttamente, SoulJem Pro richiede l'installazione delle seguent
 3. Compila ed esegui il progetto tramite la CLI di .NET:
    ```bash
    dotnet run --project SoulJemApp
+
+   download versione windows https://github.com/camperlingo/SoulJemPro/releases/download/v5.1/SoulJem_Pro_v5.1_Setup.exe
