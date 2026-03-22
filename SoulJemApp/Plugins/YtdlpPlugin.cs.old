@@ -86,14 +86,7 @@ namespace SoulJemApp.Plugins
         {
             string folder = string.IsNullOrEmpty(targetFolder) ? _downloadFolder : targetFolder;
             string outputTemplate = Path.Combine(folder, "%(title)s.%(ext)s");
-            
-            // AGGIUNTI I PARAMETRI ANTI-BOT QUI SOTTO
-            string antiBotParams = "--extractor-args \"youtube:player_client=android,web\" --geo-bypass --user-agent \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\"";
-
-            string format = onlyAudio ? 
-                $"-f \"bestaudio\" --extract-audio --audio-format mp3 --audio-quality 0 {antiBotParams}" : 
-                $"-f \"bestvideo[ext=mp4][vcodec^=avc1][height<=720]+bestaudio[ext=m4a]/best[ext=mp4]/best\" --merge-output-format mp4 {antiBotParams}";
-            
+            string format = onlyAudio ? "-f \"bestaudio\" --extract-audio --audio-format mp3 --audio-quality 0" : "-f \"bestvideo[ext=mp4][vcodec^=avc1][height<=720]+bestaudio[ext=m4a]/best[ext=mp4]/best\" --merge-output-format mp4";
             return await ExecuteDownloadProcess(folder, $"--newline --color never --no-playlist {format} -o \"{outputTemplate}\" \"{query}\"", onlyAudio ? "*.mp3" : "*.mp4", onProgress);
         }
 
@@ -102,10 +95,7 @@ namespace SoulJemApp.Plugins
             string outputTemplate = Path.Combine(targetFolder, $"{fileName}.%(ext)s");
             string qualityVal = bitrate.Contains("VBR") ? "0" : bitrate;
             
-            // AGGIUNTI I PARAMETRI ANTI-BOT ANCHE QUI PER I DOWNLOAD CUSTOM
-            string antiBotParams = "--extractor-args \"youtube:player_client=android,web\" --geo-bypass --user-agent \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\"";
-            
-            string args = $"--newline --color never --no-playlist -f \"bestaudio/best\" --extract-audio --audio-format {format} --audio-quality {qualityVal} --postprocessor-args \"-ar {hz}\" {antiBotParams} -o \"{outputTemplate}\" \"{url}\"";
+            string args = $"--newline --color never --no-playlist -f \"bestaudio/best\" --extract-audio --audio-format {format} --audio-quality {qualityVal} --postprocessor-args \"-ar {hz}\" -o \"{outputTemplate}\" \"{url}\"";
 
             return await ExecuteDownloadProcess(targetFolder, args, $"*.{format}", onProgress);
         }
