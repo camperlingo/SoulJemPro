@@ -2,7 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:SoulJemApp.Controls"
         x:Class="SoulJemApp.Views.MainWindow"
-        Title="SoulJem Pro v5.1 - TOTAL CONTROL"
+        Title="SoulJem Pro v5.5 - TOTAL CONTROL"
         Background="#0D0D0D" Foreground="White"
         Width="1350" Height="880">
 
@@ -227,7 +227,7 @@
         </Grid>
 
         <Border Grid.Row="2" Background="#1A1A1A">
-            <TextBlock Text="SoulJem Enterprise v5.1" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="10" Opacity="0.5"/>
+            <TextBlock Text="SoulJem Enterprise v5.5" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="10" Opacity="0.5"/>
         </Border>
     </Grid>
 </Window>

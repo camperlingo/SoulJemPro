@@ -9,7 +9,7 @@
     <Border BorderBrush="#444" BorderThickness="1" Margin="10">
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="15">
             <TextBlock Text="🎙️" FontSize="45" HorizontalAlignment="Center"/>
-            <TextBlock Text="SOULJEM WORKSTATION PRO v5.1" FontSize="22" FontWeight="Bold" Foreground="#FFCC00" HorizontalAlignment="Center"/>
+            <TextBlock Text="SOULJEM WORKSTATION PRO v5.5" FontSize="22" FontWeight="Bold" Foreground="#FFCC00" HorizontalAlignment="Center"/>
             <TextBlock Text="The Ultimate Karaoke &amp; Midi Experience" FontSize="14" Foreground="#29B6F6" HorizontalAlignment="Center" Margin="0,0,0,10"/>
 
             <Border Background="#151515" BorderBrush="#333" BorderThickness="1" CornerRadius="8" Padding="20" Margin="15,0">
