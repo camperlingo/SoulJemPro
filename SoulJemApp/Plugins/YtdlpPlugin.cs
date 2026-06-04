@@ -28,7 +28,7 @@ namespace SoulJemApp.Plugins
         }
 
         // ORA RESTITUISCE IL TUO MODELLO ORIGINALE COMPLETO DI IMMAGINE!
-        public async Task<List<YouTubeResultItem>> SearchAsync(string query, int maxResults = 10)
+        public async Task<List<YouTubeResultItem>> SearchAsync(string query, int maxResults = 9)
         {
             var results = new List<YouTubeResultItem>();
             try

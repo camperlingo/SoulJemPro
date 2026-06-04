@@ -42,18 +42,29 @@ namespace SoulJemApp.Views
             {
                 _salaWindow = new YouTubeSearchSalaWindow();
                 
+                // Rilevamento del doppio monitor
                 if (this.Screens.All.Count > 1)
                 {
+                    // MONITOR SALA: A tutto schermo, senza bordi
                     _salaWindow.Position = this.Screens.All[1].Bounds.Position;
+                    _salaWindow.SystemDecorations = SystemDecorations.None; // Rimuove le barre di Windows/Linux!
                     _salaWindow.WindowState = WindowState.FullScreen;
                 }
                 else
                 {
-                    _salaWindow.Width = 1200;
-                    _salaWindow.Height = 700;
-                    _salaWindow.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                    // MODALITÀ TEST 1 MONITOR: Finestra trascinabile, con i bordi, sopra a tutto ma ridotta
+                    _salaWindow.SystemDecorations = SystemDecorations.Full;
+                    _salaWindow.WindowState = WindowState.Normal;
+                    _salaWindow.Width = 1150;
+                    _salaWindow.Height = 750;
+                    _salaWindow.WindowStartupLocation = WindowStartupLocation.CenterOwner;
                 }
+                
+                // Apriamo la finestra Sala come elemento indipendente
                 _salaWindow.Show();
+                
+                // Forziamo la finestra Operatore (questa) a tornare in primissimo piano!
+                this.Activate();
             }
 
             Task.Run(async () => await PerformSearchOffThread());

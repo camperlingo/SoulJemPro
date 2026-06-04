@@ -30,6 +30,11 @@
                     </MenuItem>
 
                     <MenuItem Header="TOOLS">
+                        <MenuItem Header="🔓 Sblocca Archivio M-Live" 
+                                  Click="OnMliveDecodeClick" 
+                                  PointerPressed="OnMliveDecodeRightClick" 
+                                  ToolTip.Tip="Tasto Sinistro: Sblocca singolo file | Tasto Destro: Sblocca intera cartella"/>
+                        <Separator/>
                         <MenuItem Header="🎙️ HQ Studio Downloader (Audio)" Click="OnOpenStudioDownloaderClick"/>
                         <Separator/>
                         <MenuItem Header="📂 Apri cartella Download" Click="OnOpenDownloadsFolderClick"/>
@@ -38,7 +43,7 @@
                         <MenuItem Header="🔓 Apri Accesso Smartphone (Firewall)" Click="OnFirewallOpenClick"/>
                         <MenuItem Header="🔒 Chiudi Accesso Smartphone (Firewall)" Click="OnFirewallCloseClick"/>
                     </MenuItem>
-                    
+
                     <MenuItem Header="INFO">
                         <MenuItem Header="About SoulJem..." Click="OnInfoClick"/>
                     </MenuItem>
@@ -54,7 +59,9 @@
                 <Border Grid.Row="0" Background="Black" Margin="10" CornerRadius="8" BorderBrush="#444" BorderThickness="1" ClipToBounds="True" DoubleTapped="Preview_DoubleClick">
                     <Grid>
                         <TextBlock Text="PREVIEW VIDEO OPERATORE" VerticalAlignment="Center" HorizontalAlignment="Center" Opacity="0.1" FontSize="26"/>
-                        <controls:MpvHost x:Name="MpvPreviewHost" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                        
+                        <controls:PreviewControl x:Name="VideoSurface" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                        
                     </Grid>
                 </Border>
                 
@@ -137,7 +144,14 @@
                 <Button Name="PitchDownBtn" Content="P-" Click="OnPitchDownClick" Height="45" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Background="#1A1A1A" ToolTip.Tip="Real-time Live Pitch (-)" IsEnabled="False" Opacity="0.3"/>
                 
                 <Separator Background="#333" Height="2" Margin="0,15"/>
-                <Button Content="SYNC" Click="OnSyncClick" Height="50" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Background="#E65100" FontWeight="Bold" ToolTip.Tip="Allinea istantaneamente la TV alla Preview!"/>
+                
+                <Button Click="OnNormalizeClick" Height="50" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Background="#FF6D00" Foreground="White" ToolTip.Tip="Normalizza l'audio del brano selezionato nella Coda">
+    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="-2">
+        <TextBlock Text="🔊" FontSize="16" HorizontalAlignment="Center"/>
+        <TextBlock Text="NORM" FontSize="11" FontWeight="Bold" HorizontalAlignment="Center"/>
+    </StackPanel>
+</Button>
+                
                 <ToggleButton Name="SalaToggle" Content="SALA OFF" Click="OnSalaToggleClick" Height="50" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Background="#37474F"/>
             </StackPanel>
 

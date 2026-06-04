@@ -38,14 +38,19 @@ namespace SoulJemApp.Plugins
                 return output; 
             }
 
-            string pitchValue = Math.Pow(2, pitch / 12.0).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            // 4. Calcolo perfetto per Rubberband con conservazione formanti
+            double factor = Math.Pow(2, pitch / 12.0);
+            string pitchValue = factor.ToString(System.Globalization.CultureInfo.InvariantCulture);
             
             string videoArg = (extension == ".mp4" || extension == ".mkv" || extension == ".avi") ? "-c:v copy" : "";
+
+            // Il nuovo filtro magico di FFmpeg
+            string audioFilter = $"rubberband=pitch={pitchValue}:formant=preserved";
 
             var psi = new ProcessStartInfo
             {
                 FileName = "ffmpeg",
-                Arguments = $"-i \"{inputPath}\" {videoArg} -af asetrate=44100*{pitchValue},aresample=44100 \"{output}\" -y",
+                Arguments = $"-i \"{inputPath}\" {videoArg} -af \"{audioFilter}\" \"{output}\" -y",
                 RedirectStandardError = true,
                 RedirectStandardOutput = false,
                 UseShellExecute = false,
@@ -98,6 +103,52 @@ namespace SoulJemApp.Plugins
                 return TimeSpan.FromSeconds(seconds);
             
             return TimeSpan.Zero;
+        }
+
+        // LA FUNZIONE ORA È CORRETTAMENTE ALL'INTERNO DELLA CLASSE FFmpegPlugin
+        public async Task<string> NormalizeAudioAsync(string inputPath)
+        {
+            return await Task.Run(() =>
+            {
+                string ext = Path.GetExtension(inputPath);
+                string directory = Path.GetDirectoryName(inputPath) ?? "";
+                string fileName = Path.GetFileNameWithoutExtension(inputPath);
+                string outputPath = Path.Combine(directory, $"{fileName}_NORM{ext}");
+
+                if (File.Exists(outputPath)) File.Delete(outputPath);
+
+                // Il filtro 'loudnorm' analizza e pompa l'audio. I=-14 è bello spinto per i Live, TP=-1.0 evita che le casse gracchino.
+                // -c:v copy permette di copiare il video all'istante senza ricalcolarlo (risparmiando il 90% del tempo!)
+                string args = $"-y -i \"{inputPath}\" -c:v copy -af \"loudnorm=I=-14:LRA=11:TP=-1.0\" \"{outputPath}\"";
+
+                var processInfo = new ProcessStartInfo
+                {
+                    FileName = "ffmpeg",
+                    Arguments = args,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                using (var process = Process.Start(processInfo))
+                {
+                    process?.WaitForExit();
+                }
+
+                // MAGIA KARAOKE: Se è un MP3, cerca il CDG associato e fagli un clone con il nuovo nome!
+                if (ext.ToLower() == ".mp3")
+                {
+                    string oldCdg = Path.Combine(directory, $"{fileName}.cdg");
+                    string newCdg = Path.Combine(directory, $"{fileName}_NORM.cdg");
+                    if (File.Exists(oldCdg))
+                    {
+                        File.Copy(oldCdg, newCdg, true);
+                    }
+                }
+
+                return outputPath;
+            });
         }
     }
 }

@@ -1,0 +1,221 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:SoulJemApp.Controls"
+        x:Class="SoulJemApp.Views.MainWindow"
+        Title="SoulJem Pro v5.1 - TOTAL CONTROL"
+        Background="#0D0D0D" Foreground="White"
+        Width="1350" Height="880">
+
+    <Grid RowDefinitions="40, *, 35">
+        <Border Grid.Row="0" Name="TopMenu" Background="#1A1A1A" BorderBrush="#333" BorderThickness="0,0,0,1">
+            <DockPanel Margin="10,0">
+                <Menu VerticalAlignment="Center">
+                    <MenuItem Header="FILE">
+                        <MenuItem Header="📂 Cambia Cartella Basi..." Click="OnChangeArchiveDirClick"/>
+                        <MenuItem Header="🧹 Svuota Coda Cantanti" Click="OnClearQueueClick"/>
+                        <MenuItem Header="📜 Svuota Storico Serata" Click="OnClearHistoryClick"/>
+                        <Separator/>
+                        <MenuItem Header="❌ Esci" Click="OnExitClick"/>
+                    </MenuItem>
+                    <MenuItem Header="WEB RADIO">
+                        <MenuItem Header="📻 Gestisci Radio" Click="OpenRadioManager_Click"/>
+                    </MenuItem>
+                    <MenuItem Header="PLUGIN">
+                        <MenuItem Header="🔄 Forza Aggiornamento YouTube (yt-dlp)" Click="OnUpdateYtdlpClick"/>
+                        <MenuItem Header="⚙️ Aggiorna Motori Sistema (MPV, MIDI...)" Click="OnUpdateSystemEnginesClick"/>
+                    </MenuItem>
+                    
+                    <MenuItem Header="REALTIME PITCH LIVE">
+                        <MenuItem Header="🖥️ Benchmark PC (Sblocco Pitch)" Click="OnBenchmarkClick"/>
+                    </MenuItem>
+
+                    <MenuItem Header="TOOLS">
+                        <MenuItem Header="🎙️ HQ Studio Downloader (Audio)" Click="OnOpenStudioDownloaderClick"/>
+                        <Separator/>
+                        <MenuItem Header="📂 Apri cartella Download" Click="OnOpenDownloadsFolderClick"/>
+                        <MenuItem Header="🗑️ Svuota Cache Download" Click="OnForceCleanupClick"/>
+                        <Separator/>
+                        <MenuItem Header="🔓 Apri Accesso Smartphone (Firewall)" Click="OnFirewallOpenClick"/>
+                        <MenuItem Header="🔒 Chiudi Accesso Smartphone (Firewall)" Click="OnFirewallCloseClick"/>
+                    </MenuItem>
+                    
+                    <MenuItem Header="INFO">
+                        <MenuItem Header="About SoulJem..." Click="OnInfoClick"/>
+                    </MenuItem>
+                    
+                </Menu>
+                <Button Content="📱 QR CODE CLIENTE" Click="OnQrCodeClick" HorizontalAlignment="Right" Background="#6200EE" Padding="15,5" ToolTip.Tip="Proietta il QR in TV per 10 secondi!"/>
+            </DockPanel>
+        </Border>
+
+        <Grid Grid.Row="1" ColumnDefinitions="*, 80, 420">
+            <Grid Grid.Column="0" RowDefinitions="*, Auto">
+                
+                <Border Grid.Row="0" Background="Black" Margin="10" CornerRadius="8" BorderBrush="#444" BorderThickness="1" ClipToBounds="True" DoubleTapped="Preview_DoubleClick">
+                    <Grid>
+                        <TextBlock Text="PREVIEW VIDEO OPERATORE" VerticalAlignment="Center" HorizontalAlignment="Center" Opacity="0.1" FontSize="26"/>
+                        
+                        <controls:PreviewControl x:Name="VideoSurface" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                        
+                    </Grid>
+                </Border>
+                
+                <Grid Grid.Row="1" Name="ControlPanel" RowDefinitions="Auto, Auto, Auto" Margin="10,0,10,10">
+                    
+                    <Grid Grid.Row="0" ColumnDefinitions="Auto, Auto, *, Auto, Auto" Margin="0,0,0,5">
+                        <Button Grid.Column="0" Content="📁" Click="OnOmniFolderClick" Width="40" Background="#333" ToolTip.Tip="Carica file locale"/>
+                        <ComboBox Grid.Column="1" Name="ProviderSelector" SelectedIndex="0" Background="#222" Width="140" Margin="5,0,0,0">
+                            <ComboBoxItem Content="YouTube Video"/>
+                            <ComboBoxItem Content="Link Diretto (Vimeo, ecc)"/>
+                        </ComboBox>
+                        <TextBox Grid.Column="2" Name="OmniBar" Margin="5,0" Watermark="Cerca titolo o incolla URL..." KeyDown="OnOmniBarKeyDown"/>
+                        <Button Grid.Column="3" Content="⏎" Click="OnOmniCloudClick" Width="40" Background="#333" ToolTip.Tip="Avvia al Volo"/>
+                        <Button Grid.Column="4" Content="🔲 FULL SCREEN" Click="PreviewFullscreen_Click" Background="#444" Margin="5,0,0,0" ToolTip.Tip="Allarga a tutto schermo"/>
+                    </Grid>
+                    
+                    <Grid Grid.Row="1" ColumnDefinitions="*, *" Margin="0,0,0,10">
+                        <StackPanel Grid.Column="0" Margin="0,0,5,0">
+                            <TextBlock Text="AVANZAMENTO BASE" FontSize="9" HorizontalAlignment="Center" Opacity="0.5"/>
+                            <Slider Name="BaseProgressSlider" Minimum="0" Maximum="100" Value="0" Foreground="#2196F3"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="5,0,0,0">
+                            <TextBlock Text="AVANZAMENTO RADIO" FontSize="9" HorizontalAlignment="Center" Opacity="0.5"/>
+                            <Slider Name="RadioProgressSlider" Minimum="0" Maximum="100" Value="0" Foreground="#4CAF50"/>
+                        </StackPanel>
+                    </Grid>
+                    
+                    <Grid Grid.Row="2" ColumnDefinitions="*, 1.6*">
+                        <StackPanel Grid.Column="0" Spacing="5" Margin="0,0,10,0">
+                            <Grid ColumnDefinitions="*, *">
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="VOL. BASE" FontSize="9" HorizontalAlignment="Center"/>
+                                    <Slider Name="BaseVolumeSlider" Minimum="0" Maximum="100" Value="80" ValueChanged="OnBaseVolumeChanged"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="VOL. RADIO" FontSize="9" HorizontalAlignment="Center"/>
+                                    <Slider Name="RadioVolumeSlider" Minimum="0" Maximum="100" Value="100" ValueChanged="OnRadioVolumeChanged"/>
+                                </StackPanel>
+                            </Grid>
+                            
+                            <Grid ColumnDefinitions="Auto, *, *">
+                                <Button Grid.Column="0" Content="|◀" Click="OnRewindClick" Background="#1565C0" Margin="2" FontWeight="Bold" ToolTip.Tip="Riavvia base da capo (Preview + Sala)"/>
+                                <Button Grid.Column="1" Name="PreviewPlayPauseButton" Content="▶ PLAY" Click="OnPreviewPlayPauseClick" Background="#2E7D32" Margin="2" FontWeight="Bold" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                                <Button Grid.Column="2" Content="🛑 STOP" Click="OnPreviewStopClick" Background="#C62828" Margin="2" FontWeight="Bold" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                            </Grid>
+                            
+                        </StackPanel>
+                        <Border Grid.Column="1" Background="#080808" BorderBrush="#333" BorderThickness="1" CornerRadius="5" Padding="5">
+                            <StackPanel Spacing="5">
+                                
+                                <Grid ColumnDefinitions="*, Auto, Auto">
+                                    <ComboBox Name="RadioStationsCombo" SelectedIndex="0" Background="#222" HorizontalAlignment="Stretch" Margin="2" DropDownOpened="RadioCombo_Opened"/>
+                                    <Button Grid.Column="1" Content="⚙️" Click="OpenRadioManager_Click" Width="30" Background="#444" Margin="2" ToolTip.Tip="Gestisci Web Radio"/>
+                                    <Button Grid.Column="2" Content="📂" Click="OnCaricaCartellaRadioClick" PointerPressed="OnCaricaCartellaRightClick" Width="30" Background="#333" Margin="2" ToolTip.Tip="Sinistro: Scegli Brano | Destro: Scegli Cartella"/>
+                                </Grid>
+                                
+                                <Grid ColumnDefinitions="Auto, *, *, Auto">
+                                    <Button Grid.Column="0" Content="⏪" Click="OnRadioPrevClick" Background="#444" Margin="2" Width="35" HorizontalContentAlignment="Center" ToolTip.Tip="Traccia Precedente (Playlist)"/>
+                                    <Button Grid.Column="1" Content="🎵 CARICA RADIO" Click="OnCaricaRadioClick" Background="#1565C0" FontSize="10" Margin="2" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                                    <Button Grid.Column="2" Name="RadioPlayPauseButton" Content="▶ PLAY RADIO" Click="OnRadioPlayPauseClick" Background="#2E7D32" FontSize="10" Margin="2" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                                    <Button Grid.Column="3" Content="⏩" Click="OnRadioNextClick" Background="#444" Margin="2" Width="35" HorizontalContentAlignment="Center" ToolTip.Tip="Traccia Successiva (Playlist)"/>
+                                </Grid>
+                                <Grid ColumnDefinitions="*, *, *">
+                                    <Button Grid.Column="0" Name="VizButton" Content="VIZ" Click="OnVizClick" Background="#4A148C" FontSize="10" Margin="2" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" ToolTip.Tip="Attiva/Disattiva Sfondo Animato"/>
+                                    <Button Grid.Column="1" Content="IMG" Click="OnImgClick" Background="#EF6C00" FontSize="10" Margin="2" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                                    <ToggleButton Grid.Column="2" Name="SalaBottomToggle" Content="SALA OFF" Click="OnSalaToggleClick" Background="#37474F" FontSize="10" Margin="2" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </Grid>
+
+            <StackPanel Grid.Column="1" Name="LeftPanel" VerticalAlignment="Center" Spacing="8" Margin="5">
+                <Button Name="PitchUpBtn" Content="P+" Click="OnPitchUpClick" Height="45" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Background="#1A1A1A" ToolTip.Tip="Real-time Live Pitch (+)" IsEnabled="False" Opacity="0.3"/>
+                <Border Name="PitchDisplayBorder" Background="#111" BorderBrush="#333" BorderThickness="1" Height="35" CornerRadius="3" Opacity="0.3">
+                    <TextBlock Name="PitchValueDisplay" Text="BLOCCATO" FontSize="11" Foreground="#888" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <Button Name="PitchResetBtn" Click="OnPitchResetClick" Opacity="0" Margin="0,-43,0,0" Height="35" HorizontalAlignment="Stretch" ToolTip.Tip="Reset Pitch (0)" IsEnabled="False"/>
+                <Button Name="PitchDownBtn" Content="P-" Click="OnPitchDownClick" Height="45" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Background="#1A1A1A" ToolTip.Tip="Real-time Live Pitch (-)" IsEnabled="False" Opacity="0.3"/>
+                
+                <Separator Background="#333" Height="2" Margin="0,15"/>
+                <Button Content="SYNC" Click="OnSyncClick" Height="50" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Background="#E65100" FontWeight="Bold" ToolTip.Tip="Allinea istantaneamente la TV alla Preview!"/>
+                <ToggleButton Name="SalaToggle" Content="SALA OFF" Click="OnSalaToggleClick" Height="50" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Background="#37474F"/>
+            </StackPanel>
+
+            <Grid Grid.Column="2" Name="RightPanels" RowDefinitions="*, *">
+                <Border Grid.Row="0" Background="#151515" Margin="5" Padding="8" CornerRadius="5">
+                    <Grid RowDefinitions="Auto, Auto, *">
+                        <TextBlock Text="🔍 ARCHIVIO BASI" FontWeight="Bold" Foreground="#2196F3" Margin="0,0,0,5"/>
+                        <Grid Grid.Row="1" ColumnDefinitions="Auto, *, Auto" Margin="0,0,0,5">
+                            <Button Grid.Column="0" Content="⬆️" Click="OnDirUpClick" Margin="0,0,5,0" Background="#444" ToolTip.Tip="Sali di una cartella"/>
+                            <TextBox Grid.Column="1" Watermark="Filtra basi..." Name="ArchiveSearchBox"/>
+                            <Button Grid.Column="2" Content="📂" Click="OnChangeArchiveDirClick" Margin="5,0,0,0" Background="#333"/>
+                        </Grid>
+                        
+                        <ListBox Grid.Row="2" Background="#0A0A0A" Name="ArchiveList" DoubleTapped="OnArchiveDoubleTapped">
+                            <ListBox.Styles>
+                                <Style Selector="ListBoxItem">
+                                    <Setter Property="Padding" Value="8,2" />
+                                    <Setter Property="MinHeight" Value="24" />
+                                </Style>
+                            </ListBox.Styles>
+                        </ListBox>
+                        
+                    </Grid>
+                </Border>
+                <Border Grid.Row="1" Background="#151515" Margin="5" Padding="8" CornerRadius="5">
+                    <Grid RowDefinitions="Auto, *, Auto">
+                        <Grid ColumnDefinitions="*, Auto" Margin="0,0,0,5">
+                            <TextBlock Text="👥 CODA CANTANTI" FontWeight="Bold" Foreground="#FF9800" VerticalAlignment="Center"/>
+                            <Button Grid.Column="1" Content="+ AGGIUNGI" Click="OnAddSingerClick" Background="#2E7D32" FontSize="11" Padding="10,2"/>
+                        </Grid>
+                        
+                        <DataGrid Grid.Row="1" Background="#0A0A0A" Name="SingerGrid" DoubleTapped="OnSingerDoubleTapped" Margin="0,5" AutoGenerateColumns="False" IsReadOnly="True" GridLinesVisibility="Horizontal" HeadersVisibility="Column" x:CompileBindings="False">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Cantante" Binding="{Binding Name}" Width="*"/>
+                                <DataGridTextColumn Header="Brano" Binding="{Binding SongTitle}" Width="2*"/>
+                                <DataGridTextColumn Header="P" Binding="{Binding Pitch}" Width="40"/>
+                                <DataGridTemplateColumn Header="Stato" Width="100">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Grid>
+                                                <ProgressBar Minimum="0" Maximum="100" Value="{Binding ProgressValue}" Foreground="{Binding ProgressColor}" Background="Transparent" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" CornerRadius="0"/>
+                                                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="10" FontWeight="Bold" Foreground="White">
+                                                    <TextBlock.Text>
+                                                        <MultiBinding StringFormat="{}{0} {1}%">
+                                                            <Binding Path="Status" />
+                                                            <Binding Path="ProgressValue" />
+                                                        </MultiBinding>
+                                                    </TextBlock.Text>
+                                                </TextBlock>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        
+                        <Grid Grid.Row="2" ColumnDefinitions="Auto, *">
+                            <StackPanel Grid.Column="0" VerticalAlignment="Stretch" Margin="0,0,5,0">
+                                <Button Content="▲" Click="OnMoveUpClick" Background="#222" Width="30" Height="25" HorizontalContentAlignment="Center"/>
+                                <Button Content="▼" Click="OnMoveDownClick" Background="#222" Width="30" Height="25" Margin="0,2,0,0" HorizontalContentAlignment="Center"/>
+                            </StackPanel>
+                            
+                            <UniformGrid Grid.Column="1" Columns="2" Rows="2">
+                                <Button Content="💾 ARCHIVIA" Click="OnArchiviaClick" Background="#EF6C00" Margin="2" FontSize="11" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                                <Button Content="📜 STORICO" Click="OnStoricoClick" Background="#455A64" Margin="2" FontSize="11" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                                <Button Content="▶ AVVIA BRANO" Click="OnAvviaBranoClick" Background="#2E7D32" Margin="2" FontSize="11" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                                <Button Content="🗑 ELIMINA" Click="OnEliminaClick" Background="#C62828" Margin="2" FontSize="11" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                            </UniformGrid>
+                        </Grid>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Grid>
+
+        <Border Grid.Row="2" Background="#1A1A1A">
+            <TextBlock Text="SoulJem Enterprise v5.1" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="10" Opacity="0.5"/>
+        </Border>
+    </Grid>
+</Window>

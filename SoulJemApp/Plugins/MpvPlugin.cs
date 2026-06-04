@@ -38,6 +38,41 @@ namespace SoulJemApp.Plugins
             StartIpcListener("/tmp/souljem_radio", percent => OnRadioProgressChanged?.Invoke(percent), false, _ipcListenerCts.Token);
         }
 
+        // --- HELPER PER LOGICA MP3+G (KARAOKE) ---
+        private string PrepareMpvArgs(string filePath, ref string targetPath, string baseArgs)
+        {
+            if (string.IsNullOrEmpty(filePath)) return baseArgs;
+
+            string ext = Path.GetExtension(filePath).ToLower();
+            string directory = Path.GetDirectoryName(filePath) ?? "";
+            string fileNameWithoutExt = Path.GetFileNameWithoutExtension(filePath);
+            
+            // Cerchiamo il file compagno (mp3 o cdg) gestendo il case-sensitive di Linux
+            string companionExt = (ext == ".mp3") ? ".cdg" : (ext == ".cdg" ? ".mp3" : "");
+            
+            if (!string.IsNullOrEmpty(companionExt))
+            {
+                // Cerchiamo sia minuscolo che maiuscolo
+                string companionPath = Path.Combine(directory, fileNameWithoutExt + companionExt);
+                if (!File.Exists(companionPath)) 
+                    companionPath = Path.Combine(directory, fileNameWithoutExt + companionExt.ToUpper());
+
+                if (File.Exists(companionPath))
+                {
+                    string mp3Path = (ext == ".mp3") ? filePath : companionPath;
+                    string cdgPath = (ext == ".cdg") ? filePath : companionPath;
+
+                    // IL TRUCCO PER LINUX: Forziamo il CDG come principale e l'MP3 come audio esterno.
+                    // Rimettiamo le virgolette per proteggere i percorsi con gli SPAZI
+                    targetPath = cdgPath; 
+                    return baseArgs + $" --audio-file=\"{mp3Path}\"";
+                }
+            }
+            
+            targetPath = filePath;
+            return baseArgs;
+        }
+
         private void StartIpcListener(string socketPath, Action<int> onProgress, bool isPreview, CancellationToken token)
         {
             Task.Run(async () =>
@@ -103,21 +138,36 @@ namespace SoulJemApp.Plugins
 
         private void SendIpcCommand(string socketPath, string commandJson)
         {
-            if (!File.Exists(socketPath)) return; 
-
             Task.Run(async () => 
             {
-                try
+                int retries = 5; // Proviamo per 5 volte (mezzo secondo totale)
+                while (retries > 0)
                 {
-                    using var client = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
-                    using var cts = new CancellationTokenSource(100); 
-                    await client.ConnectAsync(new UnixDomainSocketEndPoint(socketPath), cts.Token);
+                    try
+                    {
+                        if (File.Exists(socketPath))
+                        {
+                            using var client = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+                            using var cts = new CancellationTokenSource(100); 
+                            await client.ConnectAsync(new UnixDomainSocketEndPoint(socketPath), cts.Token);
+                            
+                            using var stream = new NetworkStream(client);
+                            using var writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true };
+                            await writer.WriteLineAsync(commandJson);
+                            
+                            // Mangiamo la risposta "Ok" di MPV per non fargli dare l'errore Broken Pipe nel terminale
+                            using var reader = new StreamReader(stream, new UTF8Encoding(false));
+                            var readTask = reader.ReadLineAsync();
+                            await Task.WhenAny(readTask, Task.Delay(50)); 
+                            
+                            return; // Comando inviato con successo, usciamo dal ciclo!
+                        }
+                    }
+                    catch { } // Se fallisce, ingoia l'errore e riprova
                     
-                    using var stream = new NetworkStream(client);
-                    using var writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true };
-                    await writer.WriteLineAsync(commandJson);
+                    retries--;
+                    await Task.Delay(100); // Aspettiamo 100 millisecondi prima di riprovare
                 }
-                catch { }
             });
         }
 
@@ -155,27 +205,35 @@ namespace SoulJemApp.Plugins
             _lastFilePath = filePath;
             _lastIsLoop = isLoop;
 
-            string target = string.IsNullOrEmpty(filePath) ? "av://lavfi:color=c=blue:s=1280x720" : $"\"{filePath}\"";
+            string target = "";
             
             // PREVIEW
-            string prevArgs = $"--pause --wid={xidString} --no-border --force-window=yes --keep-open=yes --cursor-autohide=1000 --osd-level=0 --osc=no --input-vo-keyboard=no --image-display-duration=inf --vo=gpu --hwdec=vaapi --profile=fast --ytdl-format=\"bestvideo[ext=mp4][vcodec*=avc][height<=720]+bestaudio/best\"";
-            if (isLoop) prevArgs += " --loop-file=inf --vid=1 --aid=no"; 
-            else prevArgs += $" --volume={initialVolume}";
+            string prevBaseArgs = $"--pause --wid={xidString} --no-border --force-window=yes --keep-open=yes --cursor-autohide=1000 --osd-level=0 --osc=no --input-vo-keyboard=no --image-display-duration=inf --vo=gpu --hwdec=vaapi --profile=fast --video-sync=audio --ytdl-format=\"bestvideo[ext=mp4][vcodec*=avc][height<=720]+bestaudio/best\"";
+            if (isLoop) prevBaseArgs += " --loop-file=inf --vid=1 --aid=no"; 
+            else prevBaseArgs += $" --volume={initialVolume}";
             
-            _previewProcess = StartMpvProcess(target, "SoulJem_Preview", prevArgs, true, "/tmp/souljem_preview", "SoulJemBase");
+            // APPLICAZIONE LOGICA MP3+G
+            string prevFinalArgs = PrepareMpvArgs(filePath, ref target, prevBaseArgs);
+            string prevFinalTarget = string.IsNullOrEmpty(target) ? "av://lavfi:color=c=blue:s=1280x720" : target; // Tolte virgolette
+
+            _previewProcess = StartMpvProcess($"\"{prevFinalTarget}\"", "SoulJem_Preview", prevFinalArgs, true, "/tmp/souljem_preview", "SoulJemBase");
 
             // SALA
             string salaSocket = "/tmp/souljem_sala";
-            string salaArgs = $"--pause --force-window=yes --keep-open=yes --osd-level=0 --osc=no --image-display-duration=inf --ao=null --input-ipc-server={salaSocket} --vo=gpu --hwdec=vaapi --profile=fast --video-sync=audio --hr-seek-framedrop=yes --ytdl-format=\"bestvideo[ext=mp4][vcodec*=avc][height<=720]+bestaudio/best\"";
+            string salaBaseArgs = $"--pause --force-window=yes --keep-open=yes --osd-level=0 --osc=no --image-display-duration=inf --ao=null --input-ipc-server={salaSocket} --vo=gpu --hwdec=vaapi --profile=fast --video-sync=audio --hr-seek-framedrop=yes --ytdl-format=\"bestvideo[ext=mp4][vcodec*=avc][height<=720]+bestaudio/best\"";
             
             if (GetActiveMonitorsCount() > 1) {
-                salaArgs += " --screen=1 --fs-screen=1";
+                salaBaseArgs += " --screen=1 --fs-screen=1";
             }
 
-            if (isLoop) salaArgs += " --loop-file=inf --vid=1";
-            salaArgs += " --window-minimized=yes";
+            if (isLoop) salaBaseArgs += " --loop-file=inf --vid=1";
+            salaBaseArgs += " --window-minimized=yes";
             
-            _salaProcess = StartMpvProcess(target, "SoulJem_Sala", salaArgs, false, "", "SoulJemSala", true);
+            string salaTarget = "";
+            string salaFinalArgs = PrepareMpvArgs(filePath, ref salaTarget, salaBaseArgs);
+            string salaFinalTarget = string.IsNullOrEmpty(salaTarget) ? "av://lavfi:color=c=blue:s=1280x720" : salaTarget; // Tolte virgolette
+
+            _salaProcess = StartMpvProcess($"\"{salaFinalTarget}\"", "SoulJem_Sala", salaFinalArgs, false, "", "SoulJemSala", true);
 
             Task.Run(async () => {
                 int tentativi = 0;
@@ -200,15 +258,19 @@ namespace SoulJemApp.Plugins
                 if (_salaProcess == null || _salaProcess.HasExited)
                 {
                     Console.WriteLine("[SISTEMA] Finestra Sala chiusa accidentalmente. Riavvio in corso...");
-                    string target = string.IsNullOrEmpty(_lastFilePath) ? "av://lavfi:color=c=blue:s=1280x720" : $"\"{_lastFilePath}\"";
-                    string salaArgs = $"--pause --force-window=yes --keep-open=yes --osd-level=0 --osc=no --image-display-duration=inf --ao=null --input-ipc-server={salaSocket} --vo=gpu --hwdec=vaapi --profile=fast --video-sync=audio --hr-seek-framedrop=yes --ytdl-format=\"bestvideo[ext=mp4][vcodec*=avc][height<=720]+bestaudio/best\"";
+                    string target = "";
+                    string salaBaseArgs = $"--pause --force-window=yes --keep-open=yes --osd-level=0 --osc=no --image-display-duration=inf --ao=null --input-ipc-server={salaSocket} --vo=gpu --hwdec=vaapi --profile=fast --video-sync=audio --hr-seek-framedrop=yes --ytdl-format=\"bestvideo[ext=mp4][vcodec*=avc][height<=720]+bestaudio/best\"";
                     
                     if (GetActiveMonitorsCount() > 1) {
-                        salaArgs += " --screen=1 --fs-screen=1";
+                        salaBaseArgs += " --screen=1 --fs-screen=1";
                     }
-                    if (_lastIsLoop) salaArgs += " --loop-file=inf --vid=1";
+                    if (_lastIsLoop) salaBaseArgs += " --loop-file=inf --vid=1";
                     
-                    _salaProcess = StartMpvProcess(target, "SoulJem_Sala", salaArgs, false, "", "SoulJemSala", true);
+                    // APPLICAZIONE LOGICA MP3+G
+                    string salaFinalArgs = PrepareMpvArgs(_lastFilePath, ref target, salaBaseArgs);
+                    string finalTarget = string.IsNullOrEmpty(target) ? "av://lavfi:color=c=blue:s=1280x720" : target; // Tolte virgolette
+
+                    _salaProcess = StartMpvProcess($"\"{finalTarget}\"", "SoulJem_Sala", salaFinalArgs, false, "", "SoulJemSala", true);
                     
                     Task.Run(async () => {
                         await Task.Delay(1000); // Diamo 1 secondo a MPV per aprire i tubi

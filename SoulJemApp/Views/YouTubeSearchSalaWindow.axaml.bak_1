@@ -1,0 +1,32 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SoulJemApp.Views.YouTubeSearchSalaWindow"
+        Title="YOUTUBE - SALA"
+        Background="#0D0D0D" Foreground="White"
+        Width="1150" Height="750"
+        WindowStartupLocation="CenterScreen">
+    
+    <Grid RowDefinitions="Auto, *">
+        <TextBlock Grid.Row="0" Name="TitleText" Text="🔍 RICERCA IN CORSO..." FontSize="32" FontWeight="Bold" Foreground="#00E5FF" HorizontalAlignment="Center" Margin="20"/>
+        
+        <ListBox Grid.Row="1" Name="ResultsList" Background="Transparent" Margin="15" x:CompileBindings="False" IsHitTestVisible="True" ScrollViewer.VerticalScrollBarVisibility="Auto">
+            <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <UniformGrid Columns="3" HorizontalAlignment="Stretch" VerticalAlignment="Top"/>
+                </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+          
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <Border Background="#1A1A1A" CornerRadius="8" Margin="8" Padding="0" BorderBrush="#2D2D2D" BorderThickness="1.5" ClipToBounds="True">
+                        <Grid RowDefinitions="Auto, Auto, Auto">
+                            <Image Grid.Row="0" Source="{Binding ThumbnailImage}" Stretch="Uniform" HorizontalAlignment="Stretch" VerticalAlignment="Top"/>
+                            <TextBlock Grid.Row="1" Text="{Binding Title}" FontWeight="Bold" FontSize="15" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" Margin="12,10,12,0" HorizontalAlignment="Left" Foreground="White"/>
+                            <TextBlock Grid.Row="2" Text="{Binding Duration, StringFormat='Durata: {0}'}" Foreground="#FF9800" FontSize="13" Margin="12,6,12,12" HorizontalAlignment="Left"/>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </Grid>
+</Window>

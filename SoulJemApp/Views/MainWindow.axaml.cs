@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage; 
 using Avalonia.Input; 
+using Avalonia.Threading; 
 using System;
 using System.IO;
 using System.Diagnostics;
@@ -47,7 +48,15 @@ namespace SoulJemApp.Views
         private string _assetsPath;
         private bool _isVizOn = false;
         
-        private MpvPlugin _mpvEngine = new MpvPlugin();
+        private volatile bool _isSalaActive = false;
+        
+        private MpvPlugin _mpvEngine = new MpvPlugin(); 
+        private MpvLiteEngine? _liteEngine;             
+        private OutputWindow? _outputWindow; 
+        
+        private PreviewControl? _publicScreen;           
+        private DispatcherTimer _uiTimer;               
+
         private MidiMixerWindow? _mixerWindow = null;
         private MidiPlugin _midiEngine = new MidiPlugin();
         private DuckingService _ducking;
@@ -56,15 +65,13 @@ namespace SoulJemApp.Views
         private WebServerService _webServer = new WebServerService();
 
         private QrCodeWindow? _qrWindow = null;
-        private double _currentPreviewTimePos = 0;
-        private double _currentSalaTimePos = 0;
 
         public MainWindow()
         {
             InitializeComponent();
             CleanupOldWebDownloads();
 
-            _ducking = new DuckingService(_mpvEngine);
+            _ducking = new DuckingService(_mpvEngine); 
             _radiosFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "SoulJem_v5", "radios.json");
             LoadRadios();
 
@@ -100,25 +107,12 @@ namespace SoulJemApp.Views
             }
 
             _mpvEngine.OnRadioProgressChanged = (percent) => UpdateSlider("RadioProgressSlider", percent);
-            _mpvEngine.OnPreviewProgressChanged = (percent) => UpdateSlider("BaseProgressSlider", percent);
             
-            _mpvEngine.OnPreviewTimeChanged = (time) => _currentPreviewTimePos = time;
-            
-            _mpvEngine.OnSalaTimeChanged = (time) => {
-                _currentSalaTimePos = time;
-            };
-            
-            _mpvEngine.OnPreviewTrackFinished += async () => {
-                Avalonia.Threading.Dispatcher.UIThread.Post(() => {
-                    UpdateSlider("BaseProgressSlider", 0);
-                    OnPreviewStopClick(this, new RoutedEventArgs()); 
-                });
-                Console.WriteLine("[SISTEMA] Base terminata (EOF)! Ripristino la Radio...");
-                await _ducking.RestoreAsync();
-            };
+            _uiTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) }; // Per fluidità Karaoke a 20fps
+            _uiTimer.Tick += OnUiTimerTick;
 
             _webServer.OnSongRequested = (nome, canzone, note) => {
-                Avalonia.Threading.Dispatcher.UIThread.Post(() => {
+                Dispatcher.UIThread.Post(() => {
                     string titoloCompleto = string.IsNullOrEmpty(note) ? canzone : $"{canzone} [{note}]";
                     SingersQueue.Add(new SingerItem { 
                         Name = nome, 
@@ -141,6 +135,48 @@ namespace SoulJemApp.Views
             Console.WriteLine("[SISTEMA] Interfaccia caricata e pronta!");
             
             _ = _ytdlpEngine.UpdateYtdlpAsync();
+        }
+
+        private void OnUiTimerTick(object? sender, EventArgs e)
+        {
+            if (_liteEngine != null && !_isPreviewPaused && !_isDraggingBase)
+            {
+                double duration = _liteEngine.TotalDuration;
+                double current = _liteEngine.CurrentTime;
+
+                if (duration > 1.0) 
+                {
+                    double percent = (current / duration) * 100;
+                    UpdateSlider("BaseProgressSlider", (int)percent);
+                    
+                    if (current >= duration - 0.2) 
+                    {
+                        _uiTimer.Stop();
+                        Dispatcher.UIThread.Post(() => {
+                            UpdateSlider("BaseProgressSlider", 0);
+                            OnPreviewStopClick(this, new RoutedEventArgs()); 
+                            Console.WriteLine("[SISTEMA] Base terminata (EOF)! Ripristino la Radio...");
+                        });
+                    }
+                }
+                else
+                {
+                    UpdateSlider("BaseProgressSlider", 0);
+                }
+
+                // --- IL NUOVO CABLAGGIO PER IL TESTO SYLT HD ---
+                var previewScreen = this.FindControl<PreviewControl>("VideoSurface");
+                if (previewScreen != null)
+                {
+                    previewScreen.CurrentTime = current;
+                    previewScreen.InvalidateVisual();
+                }
+                if (_publicScreen != null)
+                {
+                    _publicScreen.CurrentTime = current;
+                    _publicScreen.InvalidateVisual();
+                }
+            }
         }
 
         public void OnQrCodeClick(object sender, RoutedEventArgs e)
@@ -176,7 +212,7 @@ namespace SoulJemApp.Views
                 
                 if (p != null) await Task.Run(() => p.WaitForExit());
 
-                Avalonia.Threading.Dispatcher.UIThread.Post(() => {
+                Dispatcher.UIThread.Post(() => {
                     string myIp = GetLocalIPAddress();
                     string webAppUrl = $"http://{myIp}:8080"; 
                     _qrWindow = new QrCodeWindow(webAppUrl);
@@ -194,9 +230,9 @@ namespace SoulJemApp.Views
                 {
                     _currentBackgroundImage = savedPath;
                     await Task.Delay(2000); 
-                    Avalonia.Threading.Dispatcher.UIThread.Post(() => {
+                    Dispatcher.UIThread.Post(() => {
                         if (!string.IsNullOrEmpty(_currentBackgroundImage) && !_isVizOn) 
-                            StartPreviewEmbedded(_currentBackgroundImage);
+                            StartPreviewEmbedded(_currentBackgroundImage, false, false);
                     });
                 }
             }
@@ -246,7 +282,7 @@ namespace SoulJemApp.Views
             if (sliderName == "RadioProgressSlider" && _isDraggingRadio) return;
             if (sliderName == "RadioProgressSlider" && _isRadioWebStream) percent = 0;
 
-            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            Dispatcher.UIThread.Post(() =>
             {
                 var slider = this.FindControl<Slider>(sliderName);
                 if (slider != null) slider.Value = percent;
@@ -380,23 +416,23 @@ namespace SoulJemApp.Views
             _ = Task.Run(async () => 
             {
                 string currentPath = item.SongPath;
-                Avalonia.Threading.Dispatcher.UIThread.Post(() => item.ProgressValue = 0);
+                Dispatcher.UIThread.Post(() => item.ProgressValue = 0);
 
                 if (currentPath.StartsWith("http"))
                 {
-                    Avalonia.Threading.Dispatcher.UIThread.Post(() => {
+                    Dispatcher.UIThread.Post(() => {
                         item.Status = "SCARICAMENTO";
                         item.ProgressColor = Avalonia.Media.Brushes.DeepSkyBlue; 
                     });
                     
                     string downloaded = await _ytdlpEngine.DownloadOrSearchAsync(currentPath, "", (percent) => 
                     {
-                        Avalonia.Threading.Dispatcher.UIThread.Post(() => item.ProgressValue = percent);
+                        Dispatcher.UIThread.Post(() => item.ProgressValue = percent);
                     });
 
                     if (!string.IsNullOrEmpty(downloaded)) { currentPath = downloaded; item.SongPath = downloaded; }
                     else { 
-                        Avalonia.Threading.Dispatcher.UIThread.Post(() => {
+                        Dispatcher.UIThread.Post(() => {
                             item.Status = "ERRORE WEB"; 
                             item.ProgressColor = Avalonia.Media.Brushes.Red; 
                         });
@@ -404,15 +440,12 @@ namespace SoulJemApp.Views
                     }
                 }
 
-                // Controlliamo l'estensione prima di fare qualsiasi cosa
                 string ext = Path.GetExtension(currentPath).ToLower();
                 bool isMidi = ext == ".mid" || ext == ".midi" || ext == ".kar";
 
-                // Se c'è un pitch E NON È UN MIDI, facciamo lavorare FFmpeg
-                // Se è un MIDI, saltiamo questo blocco per preservare il percorso originale!
                 if (item.Pitch != 0 && !isMidi)
                 {
-                    Avalonia.Threading.Dispatcher.UIThread.Post(() => {
+                    Dispatcher.UIThread.Post(() => {
                         item.ProgressValue = 0; 
                         item.Status = "PITCHING"; 
                         item.ProgressColor = Avalonia.Media.Brushes.Orange; 
@@ -422,13 +455,13 @@ namespace SoulJemApp.Views
 
                     string pitched = await _ffmpegEngine.ProcessPitchAsync(currentPath, item.Pitch, duration, (percent) => 
                     {
-                        Avalonia.Threading.Dispatcher.UIThread.Post(() => item.ProgressValue = percent);
+                        Dispatcher.UIThread.Post(() => item.ProgressValue = percent);
                     });
                     
                     item.SongPath = pitched;
                 }
 
-                Avalonia.Threading.Dispatcher.UIThread.Post(() => {
+                Dispatcher.UIThread.Post(() => {
                     item.Status = "PRONTA";
                     item.ProgressColor = Avalonia.Media.Brushes.LimeGreen; 
                     item.ProgressValue = 100;
@@ -437,36 +470,100 @@ namespace SoulJemApp.Views
             return Task.CompletedTask;
         }
 
-        private void StartPreviewEmbedded(string file, bool isLoop = false)
+        // RIGENERAZIONE SICURA DELLA FINESTRA
+        private void EnsureOutputWindowExists()
         {
-            var host = this.FindControl<MpvHost>("MpvPreviewHost");
-            if (host != null && host.Xid != IntPtr.Zero)
+            if (_outputWindow == null)
             {
-                string xidString = host.Xid.ToString();
-                var volSlider = this.FindControl<Slider>("BaseVolumeSlider");
-                int currentVol = volSlider != null ? (int)volSlider.Value : 100;
+                _outputWindow = new OutputWindow();
                 
-                _mpvEngine.LaunchPreview(file, xidString, currentVol, isLoop);
-                SetPlayPauseState(true); 
+                // EVENTO DI SALVATAGGIO: Se la chiudono con la 'X', azzera tutto per il prossimo click
+                _outputWindow.Closed += (s, e) => {
+                    _isSalaActive = false;
+                    _outputWindow = null; 
+                    _publicScreen = null; 
+                    Dispatcher.UIThread.Post(() => {
+                        var rightToggle = this.FindControl<Avalonia.Controls.Primitives.ToggleButton>("SalaToggle");
+                        var bottomToggle = this.FindControl<Avalonia.Controls.Primitives.ToggleButton>("SalaBottomToggle");
+                        var colorOff = Avalonia.Media.SolidColorBrush.Parse("#37474F"); 
+                        
+                        if (rightToggle != null) { rightToggle.IsChecked = false; rightToggle.Content = "SALA OFF"; rightToggle.Background = colorOff; }
+                        if (bottomToggle != null) { bottomToggle.IsChecked = false; bottomToggle.Content = "SALA OFF"; bottomToggle.Background = colorOff; }
+                    });
+                };
 
+                _publicScreen = _outputWindow.GetPublicScreen(); 
+                
                 int screens = 1;
                 try { screens = this.Screens.All.Count; } catch { }
                 
-                Task.Run(async () => {
-                    await Task.Delay(800); 
-                    if (_mpvEngine.IsSalaOn) 
-                    {
-                        _mpvEngine.ToggleSala(true, screens);
-                    }
-
-                    await Task.Delay(400);
-                    Avalonia.Threading.Dispatcher.UIThread.Post(() => {
-                        Console.WriteLine("[REGIA] Ready: Motori caldi e sincronizzati allo zero.");
-                        _mpvEngine.SyncPreviewToTime(0);
-                        _mpvEngine.SyncSalaToTime(0);
-                    });
-                });
+                if (screens > 1) {
+                    var screen = this.Screens.All[1];
+                    _outputWindow.Position = screen.WorkingArea.Position;
+                    _outputWindow.WindowState = WindowState.FullScreen;
+                    _outputWindow.SystemDecorations = SystemDecorations.None; 
+                } else {
+                    _outputWindow.WindowState = WindowState.Normal;
+                    _outputWindow.SystemDecorations = SystemDecorations.Full; 
+                    _outputWindow.Width = 800;
+                    _outputWindow.Height = 450;
+                }
             }
+        }
+
+        private void StartPreviewEmbedded(string file, bool isLoop = false, bool startPaused = false)
+        {
+            if (_liteEngine != null) 
+            { 
+                _liteEngine.Dispose(); 
+                _liteEngine = null; 
+            }
+
+            var rightToggle = this.FindControl<Avalonia.Controls.Primitives.ToggleButton>("SalaToggle");
+            _isSalaActive = rightToggle?.IsChecked ?? false;
+
+            EnsureOutputWindowExists();
+
+            if (_isSalaActive) _outputWindow?.Show();
+            else _outputWindow?.Hide(); 
+
+            var previewScreen = this.FindControl<PreviewControl>("VideoSurface");
+
+            _liteEngine = new MpvLiteEngine();
+            _liteEngine.OnFrameReady += (pixels, width, height) =>
+            {
+                previewScreen?.PushFrame(pixels, width, height);
+                if (_isSalaActive && _publicScreen != null) 
+                {
+                    _publicScreen.PushFrame(pixels, width, height);
+                }
+            };
+
+            _liteEngine.Open(file);
+            _liteEngine.Start();
+
+            // --- PASSAGGIO DELLE SILLABE (LA LETTURA DEL PENSIERO) ---
+            if (previewScreen != null) previewScreen.SyltEvents = _liteEngine.SyltEvents;
+            if (_publicScreen != null) _publicScreen.SyltEvents = _liteEngine.SyltEvents;
+            
+            var volSlider = this.FindControl<Slider>("BaseVolumeSlider");
+            if (volSlider != null) _liteEngine.SetVolume((float)(volSlider.Value / 100.0)); 
+            
+            _uiTimer.Start();
+            
+            if (startPaused)
+            {
+                _liteEngine.TogglePause();
+                SetPlayPauseState(true); 
+            }
+            else
+            {
+                SetPlayPauseState(false); 
+            }
+            
+            ApplyLivePitch();
+            
+            Console.WriteLine("[REGIA] Nuovo MpvLiteEngine in esecuzione (Condivisione Buffer Diretta + Testo Nativo).");
         }
 
         public async void OnAvviaBranoClick(object sender, RoutedEventArgs e)
@@ -486,10 +583,14 @@ namespace SoulJemApp.Views
                     Console.WriteLine($"[SEMAFORO] File MIDI rilevato ({ext})! Avvio motore FluidSynth...");
                     Console.ResetColor();
                     
-                    _mpvEngine.StopPreview(); 
+                    if (_liteEngine != null) { _liteEngine.Dispose(); _liteEngine = null; }
+                    this.FindControl<PreviewControl>("VideoSurface")?.ClearScreen();
+                    _outputWindow?.GetPublicScreen()?.ClearScreen();
+                    
                     _midiEngine.PitchShift = selectedItem.Pitch; 
                     _midiEngine.PlayMidi(selectedItem.SongPath);
                     _midiEngine.IsPaused = true;
+                    SetPlayPauseState(true); 
                     
                     if (_mixerWindow != null) _mixerWindow.Close();
                     _mixerWindow = new MidiMixerWindow(_midiEngine);
@@ -497,12 +598,12 @@ namespace SoulJemApp.Views
                 }
                 else
                 {
-                    Console.WriteLine($"[SEMAFORO] File Video/Audio rilevato ({ext}). Avvio MPV...");
+                    Console.WriteLine($"[SEMAFORO] File Video/Audio rilevato ({ext}). Messa in canna in attesa di Play...");
                     _midiEngine.StopPlayback();
-                    
                     if (_mixerWindow != null) { _mixerWindow.Close(); _mixerWindow = null; }
                     
-                    StartPreviewEmbedded(selectedItem.SongPath, false);
+                    // VERO=TRUE: La canzone è in canna, l'operatore premerà PLAY!
+                    StartPreviewEmbedded(selectedItem.SongPath, false, true); 
                 }
 
                 SingersQueue.Remove(selectedItem);
@@ -515,8 +616,10 @@ namespace SoulJemApp.Views
 
         public void OnPreviewPlayPauseClick(object sender, RoutedEventArgs e)
         {
+            if (_liteEngine == null) return;
+
             _isPreviewPaused = !_isPreviewPaused;
-            _mpvEngine.TogglePausePreview(_isPreviewPaused);
+            _liteEngine.TogglePause();
             SetPlayPauseState(_isPreviewPaused);
         }
 
@@ -540,8 +643,11 @@ namespace SoulJemApp.Views
             }
 
             _midiEngine.StopPlayback();
-            _mpvEngine.StopPreview(); 
-            _mpvEngine.StopSala(); 
+            
+            _uiTimer.Stop();
+            if (_liteEngine != null) { _liteEngine.Dispose(); _liteEngine = null; }
+            this.FindControl<PreviewControl>("VideoSurface")?.ClearScreen();
+            _publicScreen?.ClearScreen(); 
             
             UpdateSlider("BaseProgressSlider", 0);
             
@@ -549,39 +655,23 @@ namespace SoulJemApp.Views
 
             if (_currentSinger != null)
             {
-                // 1. Recuperiamo l'estensione reale del file
                 string ext = Path.GetExtension(_currentSinger.SongPath).ToLower();
                 string baseTitle = _currentSinger.SongTitle;
                 
-                // 2. Aggiungiamo l'estensione al titolo visivo se manca
-                if (!baseTitle.EndsWith(ext, StringComparison.OrdinalIgnoreCase))
-                {
-                    baseTitle += ext;
-                }
-
+                if (!baseTitle.EndsWith(ext, StringComparison.OrdinalIgnoreCase)) baseTitle += ext;
                 string finalTitle = baseTitle;
 
-                // 3. Formattazione Intelligente del Pitch
                 if (_currentSinger.Pitch != 0)
                 {
                     string sign = _currentSinger.Pitch > 0 ? "+" : "";
-                    string pitchStr = $"({sign}{_currentSinger.Pitch})"; // Risultato: (+5) o (-2)
+                    string pitchStr = $"({sign}{_currentSinger.Pitch})"; 
                     
                     string nameOnly = Path.GetFileNameWithoutExtension(baseTitle);
                     string extensionOnly = Path.GetExtension(baseTitle);
 
-                    // Cerca schemi tipo (+0), (-2), (+3) nel nome originale
                     var regex = new System.Text.RegularExpressions.Regex(@"\([+-]?\d+\)");
-                    if (regex.IsMatch(nameOnly))
-                    {
-                        // Sostituisce il vecchio valore con il nuovo pitch reale
-                        nameOnly = regex.Replace(nameOnly, pitchStr);
-                    }
-                    else
-                    {
-                        // Se non aveva le parentesi del pitch, le aggiunge pulite alla fine
-                        nameOnly += $" {pitchStr}";
-                    }
+                    if (regex.IsMatch(nameOnly)) nameOnly = regex.Replace(nameOnly, pitchStr);
+                    else nameOnly += $" {pitchStr}";
 
                     finalTitle = nameOnly + extensionOnly;
                 }
@@ -602,11 +692,11 @@ namespace SoulJemApp.Views
             if (_isVizOn && File.Exists(_vizSettingsPath))
             {
                 string loopPath = File.ReadAllText(_vizSettingsPath).Trim();
-                if (File.Exists(loopPath)) StartPreviewEmbedded(loopPath, true);
+                if (File.Exists(loopPath)) StartPreviewEmbedded(loopPath, true, false);
             }
             else if (!string.IsNullOrEmpty(_currentBackgroundImage)) 
             {
-                StartPreviewEmbedded(_currentBackgroundImage, false);
+                StartPreviewEmbedded(_currentBackgroundImage, false, false);
             }
         }
 
@@ -677,7 +767,7 @@ namespace SoulJemApp.Views
                 
                 var searchWin = new YouTubeSearchWindow(text, prefix, _ytdlpEngine, showOnTv, (selectedUrl) => 
                 {
-                    Avalonia.Threading.Dispatcher.UIThread.Post(() => 
+                    Dispatcher.UIThread.Post(() => 
                     {
                         if (!string.IsNullOrEmpty(selectedUrl))
                         {
@@ -693,7 +783,11 @@ namespace SoulJemApp.Views
 
         public void OnOmniBarKeyDown(object sender, KeyEventArgs e) { if (e.Key == Key.Enter) OnOmniCloudClick(sender, e); }
         
-        public void OnBaseVolumeChanged(object sender, Avalonia.Controls.Primitives.RangeBaseValueChangedEventArgs e) => _mpvEngine?.SetPreviewVolume((int)e.NewValue);
+        public void OnBaseVolumeChanged(object sender, Avalonia.Controls.Primitives.RangeBaseValueChangedEventArgs e) 
+        {
+            _liteEngine?.SetVolume((float)(e.NewValue / 100.0));
+        }
+
         public void OnRadioVolumeChanged(object sender, Avalonia.Controls.Primitives.RangeBaseValueChangedEventArgs e)
         {
             int newVol = (int)e.NewValue;
@@ -781,10 +875,13 @@ namespace SoulJemApp.Views
             }
         }
 
+        // TASTO ACCENSIONE E SPEGNIMENTO
         public void OnSalaToggleClick(object sender, RoutedEventArgs e)
         {
             var btn = sender as Avalonia.Controls.Primitives.ToggleButton;
             bool isSalaOn = btn?.IsChecked ?? false;
+            
+            _isSalaActive = isSalaOn; 
 
             var rightToggle = this.FindControl<Avalonia.Controls.Primitives.ToggleButton>("SalaToggle");
             var bottomToggle = this.FindControl<Avalonia.Controls.Primitives.ToggleButton>("SalaBottomToggle");
@@ -795,16 +892,23 @@ namespace SoulJemApp.Views
             if (rightToggle != null) { rightToggle.IsChecked = isSalaOn; rightToggle.Content = isSalaOn ? "SALA ON" : "SALA OFF"; rightToggle.Background = isSalaOn ? colorOn : colorOff; }
             if (bottomToggle != null) { bottomToggle.IsChecked = isSalaOn; bottomToggle.Content = isSalaOn ? "SALA ON" : "SALA OFF"; bottomToggle.Background = isSalaOn ? colorOn : colorOff; }
 
+            EnsureOutputWindowExists();
+
             if (isSalaOn) 
             {
-                int screens = 1;
-                try { screens = this.Screens.All.Count; } catch {}
+                _outputWindow?.Show();
                 
-                _mpvEngine.ToggleSala(true, screens);
+                // --- PATCH SYLT: Il Trapianto di Memoria ---
+                // Se la finestra è appena nata e il motore sta già suonando un MP3,
+                // dobbiamo iniettare immediatamente i testi nella nuova TV!
+                if (_liteEngine != null && _publicScreen != null)
+                {
+                    _publicScreen.SyltEvents = _liteEngine.SyltEvents;
+                }
             } 
             else 
             {
-                _mpvEngine.ToggleSala(false, 1);
+                _outputWindow?.Hide();
             }
         }
 
@@ -819,7 +923,7 @@ namespace SoulJemApp.Views
                 if (_currentSinger == null && File.Exists(_logoSettingsPath))
                 {
                     string savedPath = File.ReadAllText(_logoSettingsPath).Trim();
-                    if (File.Exists(savedPath)) StartPreviewEmbedded(savedPath, false);
+                    if (File.Exists(savedPath)) StartPreviewEmbedded(savedPath, false, false);
                 }
                 if (btn != null) btn.Background = Avalonia.Media.SolidColorBrush.Parse("#4A148C"); 
                 return;
@@ -847,7 +951,7 @@ namespace SoulJemApp.Views
             Console.WriteLine($"[SISTEMA] Attivazione VIZ (Video Loop): {Path.GetFileName(vizPath)}");
             if (btn != null) btn.Background = Avalonia.Media.SolidColorBrush.Parse("#D50000"); 
             
-            if (_currentSinger == null) StartPreviewEmbedded(vizPath, true);
+            if (_currentSinger == null) StartPreviewEmbedded(vizPath, true, false);
         }
 
         public async void OnImgClick(object sender, RoutedEventArgs e)
@@ -876,7 +980,7 @@ namespace SoulJemApp.Views
                 var vizBtn = this.FindControl<Button>("VizButton"); 
                 if (vizBtn != null) vizBtn.Background = Avalonia.Media.SolidColorBrush.Parse("#4A148C");
                 
-                StartPreviewEmbedded(_currentBackgroundImage, false);
+                StartPreviewEmbedded(_currentBackgroundImage, false, false);
             }
         }
 
@@ -886,7 +990,11 @@ namespace SoulJemApp.Views
         public void OnBaseSliderReleased(object? sender, PointerReleasedEventArgs e)
         {
             _isDraggingBase = false;
-            if (sender is Slider s) _mpvEngine.SeekPreview((int)s.Value);
+            if (sender is Slider s && _liteEngine != null)
+            {
+                double targetSec = (s.Value / 100.0) * _liteEngine.TotalDuration;
+                _liteEngine.Seek(targetSec);
+            }
         }
 
         public void OnRadioSliderReleased(object? sender, PointerReleasedEventArgs e)
@@ -902,9 +1010,9 @@ namespace SoulJemApp.Views
             base.OnClosed(e);
             Console.WriteLine("[SISTEMA] Chiusura dell'applicazione in corso. Terminazione motori...");
             _midiEngine?.StopEngine();
-            _mpvEngine?.StopPreview();
-            _mpvEngine?.StopSala();
-            _mpvEngine?.StopRadio();
+            _liteEngine?.Dispose();  
+            _outputWindow?.Close();
+            _mpvEngine?.StopRadio(); 
             _webServer?.Stop();
             _qrWindow?.Close();
             Environment.Exit(0);
@@ -932,8 +1040,8 @@ namespace SoulJemApp.Views
         {
             var display = this.FindControl<TextBlock>("PitchValueDisplay");
             if (display != null) display.Text = _currentLivePitch > 0 ? $"+{_currentLivePitch}" : _currentLivePitch.ToString();
-            double pitchFactor = Math.Pow(2.0, _currentLivePitch / 12.0);
-            _mpvEngine.SetLivePitch(pitchFactor);
+            
+            _liteEngine?.SetPitch(_currentLivePitch);
         }
 
         private void CleanupOldWebDownloads()
@@ -993,21 +1101,58 @@ namespace SoulJemApp.Views
             Console.WriteLine("[SISTEMA] Storico della serata azzerato manualmente.");
         }
 
-        public void OnSyncClick(object sender, RoutedEventArgs e)
+        public async void OnNormalizeClick(object sender, RoutedEventArgs e)
         {
-            if (_mpvEngine.IsSalaOn)
+            var grid = this.FindControl<DataGrid>("SingerGrid");
+            if (grid?.SelectedItem is SingerItem selectedItem)
             {
-                double targetTime = _currentPreviewTimePos;
-                _mpvEngine.SyncPreviewToTime(targetTime);
-                _mpvEngine.SyncSalaToTime(targetTime);
-                Console.WriteLine($"[SISTEMA] SYNC FORZATO: Entrambi i motori riallineati esattamente a {Math.Round(targetTime, 2)} secondi.");
+                selectedItem.Status = "🔊 ELABORAZIONE...";
+                selectedItem.ProgressColor = Avalonia.Media.Brushes.Orange;
+
+                await Task.Run(async () =>
+                {
+                    try
+                    {
+                        // Invia il file a FFmpeg per la "palestra" audio
+                        string normalizedPath = await _ffmpegEngine.NormalizeAudioAsync(selectedItem.SongPath);
+
+                        Dispatcher.UIThread.Post(() => {
+                            selectedItem.SongPath = normalizedPath;
+                            
+                            // Aggiunge l'icona della cassa se non c'è già
+                            if (!selectedItem.SongTitle.Contains("🔊"))
+                            {
+                                selectedItem.SongTitle = $"{selectedItem.SongTitle} 🔊";
+                            }
+                            
+                            selectedItem.Status = "PRONTA";
+                            selectedItem.ProgressColor = Avalonia.Media.Brushes.LimeGreen;
+                            Console.WriteLine($"[SISTEMA] Audio normalizzato e pompato con successo: {normalizedPath}");
+                            
+                            // Ridisegna la griglia per mostrare le modifiche
+                            var view = this.FindControl<DataGrid>("SingerGrid");
+                            view?.InvalidateVisual();
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Dispatcher.UIThread.Post(() => {
+                            selectedItem.Status = "ERRORE NORM";
+                            selectedItem.ProgressColor = Avalonia.Media.Brushes.Red;
+                            Console.WriteLine($"[ERRORE] Normalizzazione fallita: {ex.Message}");
+                        });
+                    }
+                });
+            }
+            else
+            {
+                Console.WriteLine("[SISTEMA] Seleziona prima un brano dalla Coda Cantanti per potenziarne l'audio!");
             }
         }
 
         public void OnRewindClick(object sender, RoutedEventArgs e)
         {
-            _mpvEngine.SeekPreview(0);
-            if (_mpvEngine.IsSalaOn) _mpvEngine.SeekSala(0);
+            _liteEngine?.Seek(0);
             Console.WriteLine("[SISTEMA] REWIND: Basi riavviate da capo.");
         }
 
@@ -1126,22 +1271,85 @@ namespace SoulJemApp.Views
             catch (Exception ex) { Console.WriteLine($"Errore: {ex.Message}"); }
         }
 
+        // --- DECODIFICA M-LIVE (SINGOLO FILE) - TASTO SINISTRO ---
+        public async void OnMliveDecodeClick(object sender, RoutedEventArgs e)
+        {
+            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions {
+                Title = "Seleziona singolo file MIDI M-Live da sbloccare",
+                AllowMultiple = false,
+                // CORREZIONE: Usiamo direttamente FilePickerFileType
+                FileTypeFilter = new[] { new FilePickerFileType("MIDI Files") { Patterns = new[] { "*.mid", "*.kar" } } }
+            });
+
+            if (files != null && files.Count >= 1)
+            {
+                string filePath = files[0].Path.LocalPath;
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine($"[M-LIVE DECODER] Preparazione decodifica singolo file: {filePath}");
+                Console.ResetColor();
+                
+                try 
+                {
+                    string outPath = await MLiveDecoder.UnlockFileAsync(filePath);
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine($"[SUCCESSO] File sbloccato e convertito in formato universale: {Path.GetFileName(outPath)}");
+                    Console.ResetColor();
+                }
+                catch (Exception ex) { Console.WriteLine($"[ERRORE] Decodifica fallita: {ex.Message}"); }
+            }
+        }
+
+        // --- DECODIFICA M-LIVE (INTERA CARTELLA) - TASTO DESTRO ---
+        public async void OnMliveDecodeRightClick(object? sender, PointerPressedEventArgs e)
+        {
+            if (e.GetCurrentPoint(this).Properties.IsRightButtonPressed)
+            {
+                var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions {
+                    Title = "Seleziona cartella M-Live da bonificare (Decodifica Batch)",
+                    AllowMultiple = false
+                });
+
+                if (folders != null && folders.Count > 0)
+                {
+                    string folderPath = folders[0].Path.LocalPath;
+                    Console.ForegroundColor = ConsoleColor.Cyan;
+                    Console.WriteLine($"[M-LIVE DECODER] Bonifica massiva avviata per la cartella: {folderPath}");
+                    Console.ResetColor();
+                    
+                    var midiFiles = Directory.GetFiles(folderPath, "*.*", SearchOption.TopDirectoryOnly)
+                                             .Where(s => s.EndsWith(".mid", StringComparison.OrdinalIgnoreCase) || s.EndsWith(".midi", StringComparison.OrdinalIgnoreCase)).ToList();
+
+                    int completati = 0;
+                    foreach (var file in midiFiles)
+                    {
+                        try 
+                        {
+                            await MLiveDecoder.UnlockFileAsync(file);
+                            completati++;
+                            Console.WriteLine($"[M-LIVE DECODER] Sbloccato: {Path.GetFileName(file)}");
+                        }
+                        catch { } 
+                    }
+                    
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine($"[SUCCESSO] Bonifica completata! {completati} basi M-Live liberate.");
+                    Console.ResetColor();
+                }
+            }
+        }
+
         public void OnOpenStudioDownloaderClick(object sender, RoutedEventArgs e)
         {
             var studioWin = new StudioDownloaderWindow();
             studioWin.Show();
         }
         
-        // ==============================================================
-        // LA TRAPPOLA BENCHMARK E IL CONTROLLO ALL'AVVIO
-        // ==============================================================
         private void CheckPitchUnlockStatus()
         {
             string statusPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "SoulJem_v5", "pitch_status.txt");
             if (File.Exists(statusPath) && File.ReadAllText(statusPath).Trim() == "PASS")
             {
-                // Riaccende i colori all'avvio senza fare il test!
-                Avalonia.Threading.Dispatcher.UIThread.Post(() => {
+                Dispatcher.UIThread.Post(() => {
                     var pUp = this.FindControl<Button>("PitchUpBtn");
                     var pDown = this.FindControl<Button>("PitchDownBtn");
                     var pRes = this.FindControl<Button>("PitchResetBtn");
@@ -1162,7 +1370,7 @@ namespace SoulJemApp.Views
             try
             {
                 string scriptPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "SoulJem_v5", "SoulJemApp", "benchmark.sh");
-                string tempResultPath = "/tmp/sj_current_test.txt"; // Legge solo il risultato immediato!
+                string tempResultPath = "/tmp/sj_current_test.txt"; 
                 
                 if (!File.Exists(scriptPath))
                 {
@@ -1185,8 +1393,7 @@ namespace SoulJemApp.Views
                     string result = File.ReadAllText(tempResultPath).Trim();
                     if (result == "PASS")
                     {
-                        // Sblocca la grafica solo per questa sessione!
-                        Avalonia.Threading.Dispatcher.UIThread.Post(() => {
+                        Dispatcher.UIThread.Post(() => {
                             var pUp = this.FindControl<Button>("PitchUpBtn");
                             var pDown = this.FindControl<Button>("PitchDownBtn");
                             var pRes = this.FindControl<Button>("PitchResetBtn");

@@ -1,0 +1,14 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:Controls="clr-namespace:SoulJemApp.Controls"
+        x:Class="SoulJemApp.Views.OutputWindow"
+        Title="Opera Suprema - Pubblico"
+        Background="Black"
+        SystemDecorations="None" 
+        WindowState="FullScreen">
+    
+    <Grid>
+        <Controls:PreviewControl x:Name="PublicVideoSurface" />
+    </Grid>
+
+</Window>
