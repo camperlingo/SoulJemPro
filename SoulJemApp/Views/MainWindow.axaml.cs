@@ -47,6 +47,7 @@ namespace SoulJemApp.Views
         private string _vizSettingsPath; 
         private string _assetsPath;
         private bool _isVizOn = false;
+        private string? _currentVizPath = null;
         
         private volatile bool _isSalaActive = false;
         
@@ -692,10 +693,42 @@ namespace SoulJemApp.Views
             
             await _ducking.RestoreAsync();
 
-            if (_isVizOn && File.Exists(_vizSettingsPath))
+            // ====================================================================
+            // PATCH ANTICRASH (SEGFAULT): Diamo 300 millisecondi di respiro a Linux
+            // per smaltire la memoria video OpenGL prima di aprire il video successivo
+            // ====================================================================
+            await Task.Delay(300);
+
+            if (_isVizOn)
             {
-                string loopPath = File.ReadAllText(_vizSettingsPath).Trim();
-                if (File.Exists(loopPath)) StartPreviewEmbedded(loopPath, true, false);
+                // Prende il visualizer corrente in RAM, se vuoto legge il file di configurazione
+                string baseViz = !string.IsNullOrEmpty(_currentVizPath) && File.Exists(_currentVizPath) 
+                    ? _currentVizPath 
+                    : (File.Exists(_vizSettingsPath) ? File.ReadAllText(_vizSettingsPath).Trim() : "");
+
+                if (File.Exists(baseViz))
+                {
+                    // Controlla se l'operatore ha messo la spunta al lucchetto (CheckBox)
+                    var lockCheck = this.FindControl<CheckBox>("VizLockCheck");
+                    bool isLocked = lockCheck?.IsChecked ?? false;
+
+                    string videoToPlay = baseViz; // Di base resta lo stesso
+
+                    if (isLocked)
+                    {
+                        Console.WriteLine($"[REGIA] Visualizer Bloccato (Loop Singolo): -> {Path.GetFileName(baseViz)}");
+                        // videoToPlay non cambia, riparte lo stesso
+                    }
+                    else
+                    {
+                        // Se non è bloccato, calcola il prossimo video alternato della cartella
+                        videoToPlay = GetNextVizPath(baseViz);
+                        _currentVizPath = videoToPlay; // Aggiorna la memoria RAM
+                        Console.WriteLine($"[REGIA] Cambio Visualizer automatico: -> {Path.GetFileName(videoToPlay)}");
+                    }
+
+                    StartPreviewEmbedded(videoToPlay, true, false);
+                }
             }
             else if (!string.IsNullOrEmpty(_currentBackgroundImage)) 
             {
@@ -954,7 +987,62 @@ namespace SoulJemApp.Views
             Console.WriteLine($"[SISTEMA] Attivazione VIZ (Video Loop): {Path.GetFileName(vizPath)}");
             if (btn != null) btn.Background = Avalonia.Media.SolidColorBrush.Parse("#D50000"); 
             
+            _currentVizPath = vizPath;
             if (_currentSinger == null) StartPreviewEmbedded(vizPath, true, false);
+        }
+
+        public async void OnVizRightClick(object? sender, PointerPressedEventArgs e)
+        {
+            // Verifica che sia effettivamente un click col tasto destro
+            if (e.GetCurrentPoint(this).Properties.IsRightButtonPressed)
+            {
+                var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { 
+                    Title = "Seleziona Cartella Visualizer (Loop Alternato)", 
+                    AllowMultiple = false 
+                });
+
+                if (folders != null && folders.Count > 0)
+                {
+                    string folderPath = folders[0].Path.LocalPath;
+                    var extensions = new[] { ".mp4", ".mkv", ".avi", ".webm", ".mov" };
+                    
+                    try 
+                    {
+                        // Cerca il primo video disponibile in quella cartella in ordine alfabetico
+                        var firstVideo = Directory.GetFiles(folderPath)
+                                                  .Where(f => extensions.Contains(Path.GetExtension(f).ToLower()))
+                                                  .OrderBy(f => f)
+                                                  .FirstOrDefault();
+
+                        if (firstVideo != null)
+                        {
+                            // Salviamo il percorso nel file di testo e in RAM
+                            File.WriteAllText(_vizSettingsPath, firstVideo);
+                            _currentVizPath = firstVideo;
+                            _isVizOn = true;
+
+                            // Accendiamo il pulsante di rosso
+                            var btn = sender as Button; 
+                            if (btn != null) btn.Background = Avalonia.Media.SolidColorBrush.Parse("#D50000"); 
+
+                            Console.ForegroundColor = ConsoleColor.Cyan;
+                            Console.WriteLine($"[SISTEMA] Nuova cartella VIZ impostata. Partenza da: {Path.GetFileName(firstVideo)}");
+                            Console.ResetColor();
+                            
+                            // Se non c'è nessuno che canta, spariamo subito il video a schermo
+                            if (_currentSinger == null) StartPreviewEmbedded(firstVideo, true, false);
+                        }
+                        else
+                        {
+                            Console.WriteLine("[SISTEMA] Nessun video compatibile trovato in questa cartella.");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[ERRORE] Impossibile leggere la cartella VIZ: {ex.Message}");
+                    }
+                }
+            }
         }
 
         public async void OnImgClick(object sender, RoutedEventArgs e)
@@ -1427,6 +1515,36 @@ namespace SoulJemApp.Views
                 }
             }
             catch (Exception ex) { Console.WriteLine($"[ERRORE] {ex.Message}"); }
+        }
+
+        private string GetNextVizPath(string currentPath)
+        {
+            try
+            {
+                string? dir = Path.GetDirectoryName(currentPath);
+                if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return currentPath;
+
+                // Estensioni video valide per i tuoi visualizer
+                var extensions = new[] { ".mp4", ".mkv", ".avi", ".webm", ".mov" };
+                var files = Directory.GetFiles(dir)
+                                    .Where(f => extensions.Contains(Path.GetExtension(f).ToLower()))
+                                    .OrderBy(f => f)
+                                    .ToList();
+
+                if (files.Count <= 1) return currentPath;
+
+                // Trova la posizione del video attuale nella cartella
+                int currentIndex = files.FindIndex(f => f.Equals(currentPath, StringComparison.OrdinalIgnoreCase));
+                if (currentIndex == -1) return files[0];
+
+                // Calcola il prossimo indice in modo circolare (alternato)
+                int nextIndex = (currentIndex + 1) % files.Count;
+                return files[nextIndex];
+            }
+            catch
+            {
+                return currentPath; // In caso di errore di lettura del disco, non crashare e mantieni lo stesso
+            }
         }
     }
 }

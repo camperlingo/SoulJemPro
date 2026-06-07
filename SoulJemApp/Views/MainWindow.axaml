@@ -124,10 +124,13 @@
                                     <Button Grid.Column="2" Name="RadioPlayPauseButton" Content="▶ PLAY RADIO" Click="OnRadioPlayPauseClick" Background="#2E7D32" FontSize="10" Margin="2" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
                                     <Button Grid.Column="3" Content="⏩" Click="OnRadioNextClick" Background="#444" Margin="2" Width="35" HorizontalContentAlignment="Center" ToolTip.Tip="Traccia Successiva (Playlist)"/>
                                 </Grid>
-                                <Grid ColumnDefinitions="*, *, *">
-                                    <Button Grid.Column="0" Name="VizButton" Content="VIZ" Click="OnVizClick" Background="#4A148C" FontSize="10" Margin="2" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" ToolTip.Tip="Attiva/Disattiva Sfondo Animato"/>
-                                    <Button Grid.Column="1" Content="IMG" Click="OnImgClick" Background="#EF6C00" FontSize="10" Margin="2" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
-                                    <ToggleButton Grid.Column="2" Name="SalaBottomToggle" Content="SALA OFF" Click="OnSalaToggleClick" Background="#37474F" FontSize="10" Margin="2" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                                <Grid ColumnDefinitions="*, Auto, *, *">
+                                    <Button Grid.Column="0" Name="VizButton" Content="VIZ" Click="OnVizClick" PointerPressed="OnVizRightClick" Background="#4A148C" FontSize="10" Margin="2" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" ToolTip.Tip="Sx: On/Off | Dx: Cartella"/>
+
+                                    <CheckBox Grid.Column="1" Name="VizLockCheck" Content="🔒" Margin="2" ToolTip.Tip="Blocca il video attuale (nessun cambio automatico)"/>
+
+                                    <Button Grid.Column="2" Content="IMG" Click="OnImgClick" Background="#EF6C00" FontSize="10" Margin="2" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                                    <ToggleButton Grid.Column="3" Name="SalaBottomToggle" Content="SALA OFF" Click="OnSalaToggleClick" Background="#37474F" FontSize="10" Margin="2" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
                                 </Grid>
                             </StackPanel>
                         </Border>
