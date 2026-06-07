@@ -56,6 +56,40 @@ namespace SoulJemApp.Plugins
             try { ffmpeg.av_log_set_level(ffmpeg.AV_LOG_ERROR); } catch { }
         }
 
+        // --- INIZIO BLOCCO WARM-UP (Versione Indistruttibile) ---
+        public static void WarmUp()
+        {
+            System.Threading.Tasks.Task.Run(() => 
+            {
+                try
+                {
+                    Console.WriteLine("[MOTORE] 🔥 Inizio Pre-riscaldamento silente in background...");
+                    
+                    // Allocazione reale: questo FORZA il caricamento delle .so in RAM
+                    // perché stiamo chiedendo al sistema di allocare memoria per FFmpeg.
+                    var fmtCtx = ffmpeg.avformat_alloc_context();
+                    var codecCtx = ffmpeg.avcodec_alloc_context3(null);
+                    
+                    // Pulizia immediata (liberiamo la RAM subito dopo aver "svegliato" le librerie)
+                    if (codecCtx != null) ffmpeg.avcodec_free_context(&codecCtx);
+                    if (fmtCtx != null) ffmpeg.avformat_free_context(fmtCtx);
+
+                    // Inizializziamo a vuoto l'AudioEngine per assicurarci che OpenAL sia pronto
+                    using (var audio = new AudioEngine()) 
+                    {
+                        audio.Init();
+                    }
+
+                    Console.WriteLine("[MOTORE] ✅ Pre-riscaldamento completato! Tutti i componenti sono in RAM.");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[MOTORE] ⚠️ Warm-up interrotto (non critico): {ex.Message}");
+                }
+            });
+        }
+        // --- FINE BLOCCO WARM-UP ---
+
         public void Open(string path)
         {
             string primaryPath = path;
@@ -141,7 +175,7 @@ namespace SoulJemApp.Plugins
                 var videoCodec = ffmpeg.avcodec_find_decoder(_formatCtx->streams[_videoStreamIndex]->codecpar->codec_id);
                 _videoCodecCtx = ffmpeg.avcodec_alloc_context3(videoCodec);
                 ffmpeg.avcodec_parameters_to_context(_videoCodecCtx, _formatCtx->streams[_videoStreamIndex]->codecpar);
-                TryInitVAAPI(); 
+                //TryInitVAAPI(); 
                 ffmpeg.avcodec_open2(_videoCodecCtx, videoCodec, null);
                 _videoTimeBase = (double)_formatCtx->streams[_videoStreamIndex]->time_base.num / _formatCtx->streams[_videoStreamIndex]->time_base.den;
             }
@@ -181,9 +215,6 @@ namespace SoulJemApp.Plugins
             if (string.IsNullOrEmpty(sampleFmt) || sampleFmt == "none") sampleFmt = "fltp";
             
             int channels = _audioCodecCtx->ch_layout.nb_channels;
-#pragma warning disable CS0618
-            if (channels <= 0) channels = _audioCodecCtx->channels;
-#pragma warning restore CS0618
             if (channels <= 0) channels = 2; 
             
             long inChannelLayout = channels == 1 ? (long)ffmpeg.AV_CH_LAYOUT_MONO : (long)ffmpeg.AV_CH_LAYOUT_STEREO;
@@ -251,7 +282,14 @@ namespace SoulJemApp.Plugins
             _running = true;
             _startSeekTime = 0;
             _clock.Restart();
-            _decodeThread = new Thread(DecodeLoop) { IsBackground = true };
+            
+            // Creiamo il thread con Priorità Massima per evitare gracchiamenti
+            _decodeThread = new Thread(DecodeLoop) 
+            { 
+                IsBackground = true,
+                Priority = ThreadPriority.Highest 
+            };
+            
             _decodeThread.Start();
         }
 
@@ -405,7 +443,7 @@ namespace SoulJemApp.Plugins
                         if (diffMs > 20) 
                             Thread.Sleep(2); 
                         else if (diffMs > 2)
-                            Thread.SpinWait(500); 
+                            Thread.Sleep(1); // Sostituito SpinWait con Sleep per liberare la CPU
                         else
                             break;
                     }

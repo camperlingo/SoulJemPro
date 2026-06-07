@@ -5,9 +5,12 @@
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-    
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    
+    <FFmpegTarget Condition="'$(FFmpegTarget)' == ''">6</FFmpegTarget>
   </PropertyGroup>
 
   <ItemGroup>
@@ -26,9 +29,16 @@
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1" />
-    <PackageReference Include="FFmpeg.AutoGen" Version="6.1.0" />
     <PackageReference Include="Melanchall.DryWetMidi" Version="8.0.3" />
     <PackageReference Include="Silk.NET.OpenAL" Version="2.23.0" />
     <PackageReference Include="Silk.NET.OpenGL" Version="2.23.0" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(FFmpegTarget)' == '6'">
+    <PackageReference Include="FFmpeg.AutoGen" Version="6.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(FFmpegTarget)' == '7'">
+    <PackageReference Include="FFmpeg.AutoGen" Version="7.0.0" />
   </ItemGroup>
 </Project>

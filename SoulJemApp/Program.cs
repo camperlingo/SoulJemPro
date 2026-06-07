@@ -9,8 +9,16 @@ sealed class Program
     // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
     // yet and stuff might break.
     [STAThread]
-    public static void Main(string[] args) => BuildAvaloniaApp()
-        .StartWithClassicDesktopLifetime(args);
+    public static void Main(string[] args)
+    {
+        // --- INIZIO PATCH FFmpeg BLINDATO ---
+        // Diciamo ad AutoGen di pescare le librerie .so ESATTAMENTE nella cartella dell'eseguibile,
+        // ignorando quelle installate nel sistema operativo.
+        FFmpeg.AutoGen.ffmpeg.RootPath = AppDomain.CurrentDomain.BaseDirectory;
+        // --- FINE PATCH ---
+
+        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+    }
 
     // Avalonia configuration, don't remove; also used by visual designer.
     public static AppBuilder BuildAvaloniaApp()

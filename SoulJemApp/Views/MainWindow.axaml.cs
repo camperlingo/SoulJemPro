@@ -68,6 +68,9 @@ namespace SoulJemApp.Views
 
         public MainWindow()
         {
+            // 1. INNESCA SUBITO IL RISCALDAMENTO IN BACKGROUND!
+            SoulJemApp.Plugins.MpvLiteEngine.WarmUp();            
+            
             InitializeComponent();
             CleanupOldWebDownloads();
 
