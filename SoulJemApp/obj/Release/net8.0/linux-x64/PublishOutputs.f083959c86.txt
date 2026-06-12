@@ -1,7 +1,0 @@
-/home/laura/SoulJem_v5.5/build_pulito/SoulJemApp.pdb
-/home/laura/SoulJem_v5.5/build_pulito/Melanchall_DryWetMidi_Native32.dll
-/home/laura/SoulJem_v5.5/build_pulito/Melanchall_DryWetMidi_Native64.dll
-/home/laura/SoulJem_v5.5/build_pulito/Melanchall_DryWetMidi_Native64.dylib
-/home/laura/SoulJem_v5.5/build_pulito/libHarfBuzzSharp.so
-/home/laura/SoulJem_v5.5/build_pulito/libSkiaSharp.so
-/home/laura/SoulJem_v5.5/build_pulito/SoulJemApp

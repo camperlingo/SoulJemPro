@@ -36,18 +36,7 @@ namespace SoulJemApp.Plugins
 
         public double TotalDuration { get; private set; }
         
-        // Il "Knob" di calibrazione: l'offset fisso è lo standard per i player a singolo thread!
-        private const double AUDIO_LATENCY_DELAY = 0.15; // 150ms di ritardo per allineare video e testo alle casse
-
-        public double CurrentTime 
-        {
-            get 
-            {
-                if (_seekRequested) return _seekTarget;
-                double t = _startSeekTime + _clock.Elapsed.TotalSeconds - AUDIO_LATENCY_DELAY;
-                return t < 0 ? 0 : t;
-            }
-        }
+        public double CurrentTime => _seekRequested ? _seekTarget : _startSeekTime + _clock.Elapsed.TotalSeconds;
         
         private double _startSeekTime = 0;
         private volatile bool _seekRequested = false;
@@ -67,45 +56,13 @@ namespace SoulJemApp.Plugins
             try { ffmpeg.av_log_set_level(ffmpeg.AV_LOG_ERROR); } catch { }
         }
 
-        // --- INIZIO BLOCCO WARM-UP ---
-        public static void WarmUp()
-        {
-            System.Threading.Tasks.Task.Run(() => 
-            {
-                try
-                {
-                    // Forza PulseAudio nativo su Linux per stabilità assoluta
-                    Environment.SetEnvironmentVariable("ALSOFT_DRIVERS", "pulse");
-                    
-                    Console.WriteLine("[MOTORE] 🔥 Inizio Pre-riscaldamento silente in background...");
-                    
-                    var fmtCtx = ffmpeg.avformat_alloc_context();
-                    var codecCtx = ffmpeg.avcodec_alloc_context3(null);
-                    
-                    if (codecCtx != null) ffmpeg.avcodec_free_context(&codecCtx);
-                    if (fmtCtx != null) ffmpeg.avformat_free_context(fmtCtx);
-
-                    using (var audio = new AudioEngine()) 
-                    {
-                        audio.Init();
-                    }
-
-                    Console.WriteLine("[MOTORE] ✅ Pre-riscaldamento completato! Tutti i componenti sono in RAM.");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[MOTORE] ⚠️ Warm-up interrotto (non critico): {ex.Message}");
-                }
-            });
-        }
-
         public void Open(string path)
         {
             string primaryPath = path;
             string secondaryPath = "";
             bool isDualStream = false;
             
-            SyltEvents.Clear();
+            SyltEvents.Clear(); // Pulisce i testi della canzone precedente
 
             string ext = Path.GetExtension(path).ToLower();
             if (ext == ".cdg")
@@ -121,12 +78,13 @@ namespace SoulJemApp.Plugins
             }
             else if (ext == ".mp3")
             {
+                // --- LA MAGIA DELLA LETTURA DEL PENSIERO (SYLT NATIVO) ---
                 var extractedSylt = SyltParser.ExtractLyrics(path);
                 if (extractedSylt != null && extractedSylt.Count > 0)
                 {
                     SyltEvents = extractedSylt;
                     primaryPath = path;
-                    isDualStream = false; 
+                    isDualStream = false; // NON cerchiamo nessun CDG, abbiamo i testi in RAM!
                     Console.WriteLine($"[MOTORE] 🧠 LETTURA DEL PENSIERO RIUSCITA! Estratte {SyltEvents.Count} sillabe sincronizzate dall'MP3. Modalità Testo Nativo attivata!");
                 }
                 else
@@ -223,6 +181,9 @@ namespace SoulJemApp.Plugins
             if (string.IsNullOrEmpty(sampleFmt) || sampleFmt == "none") sampleFmt = "fltp";
             
             int channels = _audioCodecCtx->ch_layout.nb_channels;
+#pragma warning disable CS0618
+            if (channels <= 0) channels = _audioCodecCtx->channels;
+#pragma warning restore CS0618
             if (channels <= 0) channels = 2; 
             
             long inChannelLayout = channels == 1 ? (long)ffmpeg.AV_CH_LAYOUT_MONO : (long)ffmpeg.AV_CH_LAYOUT_STEREO;
@@ -273,23 +234,16 @@ namespace SoulJemApp.Plugins
 
         private void TryInitVAAPI()
         {
+            Environment.SetEnvironmentVariable("LIBVA_DRIVER_NAME", "radeonsi");
             try
             {
                 AVBufferRef* hwDeviceCtx = null;
-                if (ffmpeg.av_hwdevice_ctx_create(&hwDeviceCtx, AVHWDeviceType.AV_HWDEVICE_TYPE_VAAPI, null, null, 0) >= 0) 
+                if (ffmpeg.av_hwdevice_ctx_create(&hwDeviceCtx, AVHWDeviceType.AV_HWDEVICE_TYPE_VAAPI, "/dev/dri/renderD128", null, 0) >= 0) 
                 {
                     _videoCodecCtx->hw_device_ctx = ffmpeg.av_buffer_ref(hwDeviceCtx);
-                    Console.WriteLine("[MOTORE] ⚡ Accelerazione Hardware VAAPI attivata con successo!");
-                }
-                else
-                {
-                    Console.WriteLine("[MOTORE] ⚠️ VAAPI non disponibile o occupato. Fallback su CPU in corso.");
                 }
             }
-            catch (Exception ex) 
-            { 
-                Console.WriteLine($"[MOTORE] Errore inizializzazione VAAPI: {ex.Message}");
-            }
+            catch { }
         }
 
         public void Start()
@@ -297,13 +251,7 @@ namespace SoulJemApp.Plugins
             _running = true;
             _startSeekTime = 0;
             _clock.Restart();
-            
-            _decodeThread = new Thread(DecodeLoop) 
-            { 
-                IsBackground = true,
-                Priority = ThreadPriority.Highest 
-            };
-            
+            _decodeThread = new Thread(DecodeLoop) { IsBackground = true };
             _decodeThread.Start();
         }
 
@@ -454,20 +402,13 @@ namespace SoulJemApp.Plugins
 
                         double diffMs = (ptsTime - elapsed) * 1000;
                         
-                        // IL SEGRETO DELLA FLUIDITA' DEL TUO PROTOTIPO:
                         if (diffMs > 20) 
                             Thread.Sleep(2); 
                         else if (diffMs > 2)
-                            Thread.SpinWait(500); // <-- Magia assoluta di temporizzazione su Linux
+                            Thread.SpinWait(500); 
                         else
                             break;
                     }
-                }
-
-                // Scarta il fotogramma solo se il doppio schermo fa accumulare vero ritardo
-                if (!_isPaused && (CurrentTime - ptsTime) > 0.04) 
-                {
-                    return; 
                 }
             }
 
@@ -538,8 +479,8 @@ namespace SoulJemApp.Plugins
                     if (ret < 0) break;
 
                     int channels = filtFrame->ch_layout.nb_channels > 0 ? filtFrame->ch_layout.nb_channels : 2;
+
                     int dataSize = ffmpeg.av_samples_get_buffer_size(null, channels, filtFrame->nb_samples, (AVSampleFormat)filtFrame->format, 1);
-                    
                     if (dataSize > 0)
                     {
                         byte[] pcmData = new byte[dataSize];

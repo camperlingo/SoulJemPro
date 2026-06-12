@@ -32,21 +32,38 @@ namespace SoulJemApp.Plugins
             if (_al == null) return;
 
             _al.GetSourceProperty(_source, GetSourceInteger.BuffersProcessed, out int processed);
+            uint bufferToReuse = 0;
+
+            // [FIX] Svuota TUTTI i buffer accumulati per evitare l'ingorgo della scheda audio
             while (processed > 0)
             {
                 uint unqueued;
                 _al.SourceUnqueueBuffers(_source, 1, &unqueued);
-                _al.DeleteBuffer(unqueued);
+                
+                if (bufferToReuse == 0) 
+                {
+                    bufferToReuse = unqueued; // Tiene il primo per riciclarlo (Ottimizzazione CPU)
+                }
+                else 
+                {
+                    _al.DeleteBuffer(unqueued); // Demolisce l'eccesso per non intasare la RAM
+                }
                 processed--;
             }
 
-            uint buffer = _al.GenBuffer();
+            // Se non c'erano buffer da riciclare, ne crea uno nuovo
+            if (bufferToReuse == 0)
+            {
+                bufferToReuse = _al.GenBuffer();
+            }
+
+            // Riempiamo il buffer con i nuovi dati audio
             fixed (byte* p = pcmData)
             {
-                _al.BufferData(buffer, BufferFormat.Stereo16, p, pcmData.Length, sampleRate);
+                _al.BufferData(bufferToReuse, BufferFormat.Stereo16, p, pcmData.Length, sampleRate);
             }
             
-            _al.SourceQueueBuffers(_source, 1, &buffer);
+            _al.SourceQueueBuffers(_source, 1, &bufferToReuse);
 
             _al.GetSourceProperty(_source, GetSourceInteger.SourceState, out int state);
             if (state != (int)SourceState.Playing && state != (int)SourceState.Paused)
