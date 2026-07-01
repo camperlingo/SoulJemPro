@@ -26,7 +26,7 @@ namespace SoulJemApp.Plugins
         private int _audioStreamIndex = -1;
 
         private Thread? _decodeThread;
-        private bool _running;
+        private volatile bool _running;
         private volatile bool _isPaused = false;
         private AudioEngine? _audioEngine;
 
@@ -34,49 +34,68 @@ namespace SoulJemApp.Plugins
         private double _videoTimeBase;
         private double _audioTimeBase;
 
+        private double _lastSeekRequestTime = 0; 
+        private long _lastSeekTickCount = 0;
+        private long _lastSnapTickCount = 0;
+        
         public double TotalDuration { get; private set; }
         
-        // Il "Knob" di calibrazione: l'offset fisso è lo standard per i player a singolo thread!
-        private const double AUDIO_LATENCY_DELAY = 0.15; // 150ms di ritardo per allineare video e testo alle casse
+        private const double AUDIO_LATENCY_DELAY = 0.15; 
 
         public double CurrentTime 
         {
             get 
             {
-                if (_seekRequested) return _seekTarget;
-                double t = _startSeekTime + _clock.Elapsed.TotalSeconds - AUDIO_LATENCY_DELAY;
-                return t < 0 ? 0 : t;
+                lock (_seekLock)
+                {
+                    if (_seekRequested) return _seekTarget;
+                    double t = _startSeekTime + _clock.Elapsed.TotalSeconds - AUDIO_LATENCY_DELAY;
+                    return t < 0 ? 0 : t;
+                }
             }
         }
         
         private double _startSeekTime = 0;
         private volatile bool _seekRequested = false;
         private double _seekTarget = 0;
+        private readonly object _seekLock = new object();
 
         private double _pitchFactor = 1.0;
         private volatile bool _pitchChanged = false;
 
         public event Action<byte[], int, int>? OnFrameReady;
         
-        // LA NOSTRA LISTA DI EVENTI TESTUALI IN RAM
         public List<SyltEvent> SyltEvents { get; private set; } = new List<SyltEvent>();
+
+        // 🚀 IL COSTRUTTORE IBRIDO (La magia della portabilità)
+        static MpvLiteEngine()
+        {
+            string localPath = AppContext.BaseDirectory;
+            
+            if (Directory.GetFiles(localPath, "libavformat.so.*").Length > 0)
+            {
+                Console.WriteLine("[SISTEMA] Trovate librerie FFmpeg portatili. Avvio in modalità Standalone.");
+                ffmpeg.RootPath = localPath;
+            }
+            else
+            {
+                Console.WriteLine("[SISTEMA] Librerie locali assenti. Uso FFmpeg di sistema (Modalità Sviluppo/Laura).");
+                ffmpeg.RootPath = "/usr/lib/x86_64-linux-gnu";
+            }
+        }
 
         public MpvLiteEngine()
         {
-            ffmpeg.RootPath = "/usr/lib/x86_64-linux-gnu";
             try { ffmpeg.av_log_set_level(ffmpeg.AV_LOG_ERROR); } catch { }
         }
 
-        // --- INIZIO BLOCCO WARM-UP ---
         public static void WarmUp()
         {
             System.Threading.Tasks.Task.Run(() => 
             {
                 try
                 {
-                    // Forza PulseAudio nativo su Linux per stabilità assoluta
                     Environment.SetEnvironmentVariable("ALSOFT_DRIVERS", "pulse");
-                    
                     Console.WriteLine("[MOTORE] 🔥 Inizio Pre-riscaldamento silente in background...");
                     
                     var fmtCtx = ffmpeg.avformat_alloc_context();
@@ -295,32 +314,52 @@ namespace SoulJemApp.Plugins
         public void Start()
         {
             _running = true;
-            _startSeekTime = 0;
-            _clock.Restart();
             
-            _decodeThread = new Thread(DecodeLoop) 
-            { 
-                IsBackground = true,
-                Priority = ThreadPriority.Highest 
-            };
+            lock (_seekLock)
+            {
+                _startSeekTime = 0;
+                _clock.Restart();
+            }
+
+            bool hasRealVideo = _videoStreamIndex != -1 && _formatCtx != null &&
+                                ((_formatCtx->streams[_videoStreamIndex]->disposition & ffmpeg.AV_DISPOSITION_ATTACHED_PIC) == 0);
+
+            if (!hasRealVideo)
+            {
+                int width = 1280;
+                int height = 720;
+                int size = width * height * 4; 
+                byte[] blackFrame = new byte[size];
+                for (int i = 3; i < size; i += 4) blackFrame[i] = 255;
+                OnFrameReady?.Invoke(blackFrame, width, height);
+            }
             
+            _decodeThread = new Thread(DecodeLoop) { IsBackground = true, Priority = ThreadPriority.Highest };
             _decodeThread.Start();
         }
 
         public void Seek(double timeInSeconds)
         {
-            _seekTarget = timeInSeconds;
-            _seekRequested = true;
+            lock (_seekLock)
+            {
+                _seekTarget = timeInSeconds;
+                _seekRequested = true;
+            }
         }
 
         public void TogglePause()
         {
-            _isPaused = !_isPaused;
-            if (_isPaused) { _clock.Stop(); _audioEngine?.PauseAudio(); }
-            else { _clock.Start(); _audioEngine?.ResumeAudio(); }
+            lock (_seekLock)
+            {
+                _isPaused = !_isPaused;
+                if (_isPaused) { _clock.Stop(); _audioEngine?.PauseAudio(); }
+                else { _clock.Start(); _audioEngine?.ResumeAudio(); }
+            }
         }
 
         public void SetVolume(float volume) { _audioEngine?.SetVolume(volume); }
+
+        private bool _snapClockToPts = false; 
 
         private void DecodeLoop()
         {
@@ -333,34 +372,104 @@ namespace SoulJemApp.Plugins
             double lastVideoPtsTime = 0;
             bool eofCdg = false;
 
+            bool hasRealVideo = _videoStreamIndex != -1 && 
+                                ((_formatCtx->streams[_videoStreamIndex]->disposition & ffmpeg.AV_DISPOSITION_ATTACHED_PIC) == 0);
+
             while (_running && _formatCtx != null)
             {
-                if (_seekRequested)
+                bool doSeek = false;
+                double localSeekTarget = 0;
+
+                lock (_seekLock)
                 {
-                    long targetPtsAudio = (long)(_seekTarget * ffmpeg.AV_TIME_BASE);
-                    
-                    ffmpeg.av_seek_frame(_formatCtx, -1, targetPtsAudio, ffmpeg.AVSEEK_FLAG_BACKWARD);
-                    
-                    if (_formatCtxSecondary != null) 
+                    if (_seekRequested)
                     {
-                        ffmpeg.av_seek_frame(_formatCtxSecondary, -1, targetPtsAudio, ffmpeg.AVSEEK_FLAG_BACKWARD);
+                        doSeek = true;
+                        localSeekTarget = _seekTarget;
+                        _seekRequested = false;
+                    }
+                }
+
+                if (doSeek)
+                {
+                    long currentTick = Environment.TickCount64;
+                    
+                    if (Math.Abs(localSeekTarget - _lastSeekRequestTime) < 0.05 && 
+                        (currentTick - _lastSeekTickCount) < 100)
+                    {
+                        continue; 
+                    }
+                    
+                    if (_lastSnapTickCount > 0 && (currentTick - _lastSnapTickCount) < 300)
+                    {
+                        continue;
+                    }
+
+                    _lastSeekRequestTime = localSeekTarget;
+                    _lastSeekTickCount = currentTick;
+
+                    int ret = -1;
+
+                    if (hasRealVideo)
+                    {
+                        long targetPtsVideo = (long)(localSeekTarget / _videoTimeBase);
+                        ret = ffmpeg.av_seek_frame(_formatCtx, _videoStreamIndex, targetPtsVideo, ffmpeg.AVSEEK_FLAG_BACKWARD);
+                        if (ret < 0) ret = ffmpeg.av_seek_frame(_formatCtx, _videoStreamIndex, targetPtsVideo, ffmpeg.AVSEEK_FLAG_ANY);
+                    }
+                    else if (_audioStreamIndex != -1)
+                    {
+                        if (_videoStreamIndex != -1) 
+                            _formatCtx->streams[_videoStreamIndex]->discard = AVDiscard.AVDISCARD_ALL;
+
+                        long fileSize = _formatCtx->pb != null ? ffmpeg.avio_size(_formatCtx->pb) : 0;
+                        double durSec = TotalDuration > 0 ? TotalDuration : (_formatCtx->duration / (double)ffmpeg.AV_TIME_BASE);
+
+                        if (fileSize > 0 && durSec > 0)
+                        {
+                            long bytePos = 0;
+                            if (localSeekTarget > 0.1)
+                            {
+                                bytePos = (long)((localSeekTarget / durSec) * fileSize);
+                                if (bytePos > fileSize - 1000) bytePos = fileSize - 1000;
+                            }
+                            
+                            ret = ffmpeg.av_seek_frame(_formatCtx, -1, bytePos, ffmpeg.AVSEEK_FLAG_BYTE);
+                            Console.WriteLine($"[MOTORE] Logica MP3: BYTE SEEK Unificato a pos {bytePos} (Target: {localSeekTarget:F2}s)");
+                        }
+                        else
+                        {
+                            long targetPtsAudio = (long)(localSeekTarget / _audioTimeBase);
+                            ret = ffmpeg.av_seek_frame(_formatCtx, _audioStreamIndex, targetPtsAudio, ffmpeg.AVSEEK_FLAG_BACKWARD);
+                        }
+                    }
+
+                    if (_formatCtxSecondary != null)
+                    {
+                        long targetPtsGlobal = (long)(localSeekTarget * ffmpeg.AV_TIME_BASE);
+                        ffmpeg.av_seek_frame(_formatCtxSecondary, -1, targetPtsGlobal, ffmpeg.AVSEEK_FLAG_BACKWARD);
                         eofCdg = false;
                     }
 
-                    if (_videoCodecCtx != null) ffmpeg.avcodec_flush_buffers(_videoCodecCtx);
-                    if (_audioCodecCtx != null) ffmpeg.avcodec_flush_buffers(_audioCodecCtx);
-                    _audioEngine?.ClearBuffers();
-                    
-                    ReinitFilterGraph(); 
-                    _pitchChanged = false;
+                    if (ret >= 0)
+                    {
+                        if (_videoCodecCtx != null) ffmpeg.avcodec_flush_buffers(_videoCodecCtx);
+                        if (_audioCodecCtx != null) ffmpeg.avcodec_flush_buffers(_audioCodecCtx);
+                        _audioEngine?.ClearBuffers();
+                        ReinitFilterGraph(); 
+                        _pitchChanged = false;
 
-                    _startSeekTime = _seekTarget;
-                    _clock.Restart();
+                        lock (_seekLock)
+                        {
+                            _startSeekTime = localSeekTarget; 
+                            _clock.Reset();
+                            if (!_isPaused) _clock.Start();
+                        }
+                        
+                        _snapClockToPts = true; 
+                        lastAudioPtsTime = localSeekTarget;
+                        lastVideoPtsTime = localSeekTarget; 
+                    }
                     
-                    lastAudioPtsTime = _seekTarget;
-                    lastVideoPtsTime = _formatCtxSecondary != null ? 0 : _seekTarget; 
-                    
-                    _seekRequested = false;
                     continue;
                 }
 
@@ -374,19 +483,59 @@ namespace SoulJemApp.Plugins
 
                 if (_formatCtxSecondary != null && !eofCdg && lastVideoPtsTime <= lastAudioPtsTime)
                 {
-                    if (ffmpeg.av_read_frame(_formatCtxSecondary, &packet) >= 0) 
-                    {
-                        readFromSecondary = true;
-                    }
+                    int secRet = ffmpeg.av_read_frame(_formatCtxSecondary, &packet);
+                    if (secRet >= 0) readFromSecondary = true;
                     else
                     {
                         eofCdg = true; 
-                        if (ffmpeg.av_read_frame(_formatCtx, &packet) < 0) break;
+                        int primRet = ffmpeg.av_read_frame(_formatCtx, &packet);
+                        if (primRet < 0)
+                        {
+                            if (primRet == ffmpeg.AVERROR_EOF) 
+                            {
+                                // 🚑 IL DEFIBRILLATORE: Resurrezione dal Falso EOF!
+                                if (!hasRealVideo && TotalDuration > 0 && lastAudioPtsTime < TotalDuration - 1.0)
+                                {
+                                    long fileSize = _formatCtx->pb != null ? ffmpeg.avio_size(_formatCtx->pb) : 0;
+                                    if (fileSize > 0)
+                                    {
+                                        Console.WriteLine($"[MOTORE] ⚠️ Allucinazione EOF a {lastAudioPtsTime:F2}s! DEFIBRILLATORE ATTIVATO.");
+                                        long targetByte = (long)(((lastAudioPtsTime + 0.2) / TotalDuration) * fileSize);
+                                        ffmpeg.avformat_flush(_formatCtx);
+                                        ffmpeg.av_seek_frame(_formatCtx, -1, targetByte, ffmpeg.AVSEEK_FLAG_BYTE);
+                                    }
+                                    continue;
+                                }
+                                break; 
+                            }
+                            continue; 
+                        }
                     }
                 }
                 else
                 {
-                    if (ffmpeg.av_read_frame(_formatCtx, &packet) < 0) break; 
+                    int primRet = ffmpeg.av_read_frame(_formatCtx, &packet);
+                    if (primRet < 0) 
+                    {
+                        if (primRet == ffmpeg.AVERROR_EOF) 
+                        {
+                            // 🚑 IL DEFIBRILLATORE
+                            if (!hasRealVideo && TotalDuration > 0 && lastAudioPtsTime < TotalDuration - 1.0)
+                            {
+                                long fileSize = _formatCtx->pb != null ? ffmpeg.avio_size(_formatCtx->pb) : 0;
+                                if (fileSize > 0)
+                                {
+                                    Console.WriteLine($"[MOTORE] ⚠️ Allucinazione EOF a {lastAudioPtsTime:F2}s! DEFIBRILLATORE ATTIVATO.");
+                                    long targetByte = (long)(((lastAudioPtsTime + 0.2) / TotalDuration) * fileSize);
+                                    ffmpeg.avformat_flush(_formatCtx);
+                                    ffmpeg.av_seek_frame(_formatCtx, -1, targetByte, ffmpeg.AVSEEK_FLAG_BYTE);
+                                }
+                                continue;
+                            }
+                            break; 
+                        }
+                        continue; 
+                    }
                 }
 
                 if (readFromSecondary)
@@ -394,14 +543,11 @@ namespace SoulJemApp.Plugins
                     if (packet.stream_index == _secondaryVideoStreamIndex && _videoCodecCtx != null)
                     {
                         if (packet.pts != ffmpeg.AV_NOPTS_VALUE) lastVideoPtsTime = packet.pts * _videoTimeBase;
-                        
                         ffmpeg.avcodec_send_packet(_videoCodecCtx, &packet);
                         while (ffmpeg.avcodec_receive_frame(_videoCodecCtx, videoFrame) == 0)
                         {
                             if (!_running || _seekRequested) break;
-                            
                             if (lastVideoPtsTime < CurrentTime - 0.2) continue; 
-                                
                             ProcessVideoFrame(videoFrame, rgbFrame);
                         }
                     }
@@ -410,6 +556,12 @@ namespace SoulJemApp.Plugins
                 {
                     if (packet.stream_index == _videoStreamIndex && _videoCodecCtx != null)
                     {
+                        if (!hasRealVideo)
+                        {
+                            ffmpeg.av_packet_unref(&packet);
+                            continue;
+                        }
+
                         if (packet.pts != ffmpeg.AV_NOPTS_VALUE) lastVideoPtsTime = packet.pts * _videoTimeBase;
                         ffmpeg.avcodec_send_packet(_videoCodecCtx, &packet);
                         while (ffmpeg.avcodec_receive_frame(_videoCodecCtx, videoFrame) == 0)
@@ -420,15 +572,52 @@ namespace SoulJemApp.Plugins
                     }
                     else if (packet.stream_index == _audioStreamIndex && _audioCodecCtx != null)
                     {
-                        if (packet.pts != ffmpeg.AV_NOPTS_VALUE) lastAudioPtsTime = packet.pts * _audioTimeBase;
                         ffmpeg.avcodec_send_packet(_audioCodecCtx, &packet);
                         while (ffmpeg.avcodec_receive_frame(_audioCodecCtx, audioFrame) == 0)
                         {
                             if (!_running || _seekRequested) break;
+
+                            if (_snapClockToPts)
+                            {
+                                long framePts = audioFrame->pts != ffmpeg.AV_NOPTS_VALUE ? audioFrame->pts : audioFrame->pkt_dts;
+                                double ptsTime = (framePts != ffmpeg.AV_NOPTS_VALUE) 
+                                    ? framePts * _audioTimeBase 
+                                    : lastAudioPtsTime + (double)audioFrame->nb_samples / _audioCodecCtx->sample_rate;
+
+                                lock (_seekLock)
+                                {
+                                    if (hasRealVideo)
+                                    {
+                                        double snapTarget = ptsTime;
+                                        if (_startSeekTime < 0.5) snapTarget = 0.0;
+                                        _startSeekTime = snapTarget;
+                                    }
+                                    
+                                    _clock.Restart();
+                                }
+                                
+                                _snapClockToPts = false;
+                                _lastSnapTickCount = Environment.TickCount64; 
+                                lastAudioPtsTime = _startSeekTime; 
+                                
+                                Console.WriteLine($"[MOTORE] Sincronia Ripristinata: Orologio allineato a {_startSeekTime:F2}s");
+                                
+                                ffmpeg.av_frame_unref(audioFrame);
+                                continue; 
+                            }
+
+                            long currentFramePts = audioFrame->pts != ffmpeg.AV_NOPTS_VALUE ? audioFrame->pts : audioFrame->pkt_dts;
+                            
+                            if (hasRealVideo && currentFramePts != ffmpeg.AV_NOPTS_VALUE)
+                                lastAudioPtsTime = currentFramePts * _audioTimeBase;
+                            else
+                                lastAudioPtsTime += (double)audioFrame->nb_samples / _audioCodecCtx->sample_rate;
+
                             ProcessAudioFrame(audioFrame);
                         }
                     }
                 }
+                
                 ffmpeg.av_packet_unref(&packet);
             }
 
@@ -454,17 +643,15 @@ namespace SoulJemApp.Plugins
 
                         double diffMs = (ptsTime - elapsed) * 1000;
                         
-                        // IL SEGRETO DELLA FLUIDITA' DEL TUO PROTOTIPO:
                         if (diffMs > 20) 
                             Thread.Sleep(2); 
                         else if (diffMs > 2)
-                            Thread.SpinWait(500); // <-- Magia assoluta di temporizzazione su Linux
+                            Thread.SpinWait(500); 
                         else
                             break;
                     }
                 }
 
-                // Scarta il fotogramma solo se il doppio schermo fa accumulare vero ritardo
                 if (!_isPaused && (CurrentTime - ptsTime) > 0.04) 
                 {
                     return; 
